@@ -1,0 +1,24 @@
+# ReRoute re-accommodation objective weights.
+# Objective = delay cost + VIP delay penalty + cabin downgrade penalty + connection risk
+#           + rebooking cost + unassigned passenger penalty   (minimised by NVIDIA cuOpt)
+# Units are "cost points"; one point ~= one minute of an ordinary passenger's delay.
+weights:
+  delay_weight: 1.0              # per minute of arrival delay vs. the original schedule
+  vip_delay_weight: 3.0          # ADDITIONAL per-minute delay cost for VIP passengers
+  tier_delay_multiplier:         # loyalty tier scales the base delay cost
+    PLATINUM: 1.5
+    GOLD: 1.25
+    SILVER: 1.1
+    BASIC: 1.0
+  downgrade_weight: 400.0        # Business passenger re-accommodated in Economy (x tier multiplier)
+  vip_downgrade_multiplier: 3.0  # VIP downgrade is 3x as costly (VIP-001)
+  connection_risk_weight: 6.0    # per minute the connection margin falls short of the risk buffer
+  unassigned_weight: 100000.0    # passenger left without a feasible seat (kept very high)
+  vip_unassigned_multiplier: 2.0
+  rebooking_cost:
+    own_carrier: 20.0            # ticket re-issue on own metal
+    interline: 150.0             # interline endorsement / settlement cost (IROP-004)
+
+solver:
+  time_limit_seconds: 10
+  mip_relative_gap: 0.0

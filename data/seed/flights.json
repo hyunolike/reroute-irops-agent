@@ -1,0 +1,18 @@
+{
+  "_comment": "Times are local (ICN = KST, NRT/HND = JST; both UTC+09:00). day_offset is relative to the demo service date.",
+  "flights": [
+    {"flight_no": "KE123", "carrier": "KE", "origin": "ICN", "destination": "NRT", "day_offset": 0, "departure": "10:00", "arrival": "12:20", "status": "CANCELLED", "economy_capacity": 30, "business_capacity": 8, "aircraft": "A321neo", "terminal": "T2"},
+    {"flight_no": "KE701", "carrier": "KE", "origin": "ICN", "destination": "NRT", "day_offset": 0, "departure": "14:00", "arrival": "16:20", "status": "SCHEDULED", "economy_capacity": 10, "business_capacity": 2, "aircraft": "B737-8", "terminal": "T2"},
+    {"flight_no": "OZ102", "carrier": "OZ", "origin": "ICN", "destination": "NRT", "day_offset": 0, "departure": "15:30", "arrival": "17:50", "status": "SCHEDULED", "economy_capacity": 8, "business_capacity": 3, "aircraft": "A330-300", "terminal": "T1"},
+    {"flight_no": "KE703", "carrier": "KE", "origin": "ICN", "destination": "NRT", "day_offset": 0, "departure": "16:00", "arrival": "18:20", "status": "SCHEDULED", "economy_capacity": 20, "business_capacity": 1, "aircraft": "A220-300", "terminal": "T2"},
+    {"flight_no": "7C1102", "carrier": "7C", "origin": "ICN", "destination": "NRT", "day_offset": 0, "departure": "13:30", "arrival": "15:50", "status": "SCHEDULED", "economy_capacity": 15, "business_capacity": 0, "aircraft": "B737-800", "terminal": "T1"},
+    {"flight_no": "KE2101", "carrier": "KE", "origin": "ICN", "destination": "HND", "day_offset": 0, "departure": "13:00", "arrival": "15:15", "status": "SCHEDULED", "economy_capacity": 12, "business_capacity": 2, "aircraft": "A321neo", "terminal": "T2"},
+    {"flight_no": "KE705", "carrier": "KE", "origin": "ICN", "destination": "NRT", "day_offset": 1, "departure": "09:00", "arrival": "11:20", "status": "SCHEDULED", "economy_capacity": 30, "business_capacity": 8, "aircraft": "A321neo", "terminal": "T2"},
+    {"flight_no": "KE125", "carrier": "KE", "origin": "ICN", "destination": "NRT", "day_offset": 0, "departure": "19:30", "arrival": "21:50", "status": "DELAYED", "economy_capacity": 24, "business_capacity": 4, "aircraft": "A321neo", "terminal": "T2"},
+    {"flight_no": "KE001", "carrier": "KE", "origin": "ICN", "destination": "LAX", "day_offset": 0, "departure": "20:00", "arrival": "14:30", "status": "SCHEDULED", "economy_capacity": 5, "business_capacity": 1, "aircraft": "B787-9", "terminal": "T2"}
+  ],
+  "disruptions": [
+    {"flight_no": "KE123", "type": "CANCELLATION", "reason": "Aircraft technical issue (AOG - hydraulic system) at ICN", "airline_fault": true, "delay_minutes": 0, "occurred_at": "07:45"},
+    {"flight_no": "KE125", "type": "DELAY", "reason": "Late inbound aircraft", "airline_fault": true, "delay_minutes": 45, "occurred_at": "08:10"}
+  ]
+}

@@ -1,0 +1,637 @@
+{
+ "_comment": "KE123 (ICN-NRT) manifest. booked_days_before drives the first-come-first-served baseline.",
+ "passengers": [
+  {
+   "id": "P001",
+   "name": "김민준 (Kim Minjun)",
+   "tier": "PLATINUM",
+   "vip": true,
+   "special_assistance": null
+  },
+  {
+   "id": "P002",
+   "name": "Sarah Johnson",
+   "tier": "PLATINUM",
+   "vip": true,
+   "special_assistance": null
+  },
+  {
+   "id": "P003",
+   "name": "이서연 (Lee Seoyeon)",
+   "tier": "GOLD",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P004",
+   "name": "Takeshi Yamamoto",
+   "tier": "GOLD",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P005",
+   "name": "박지훈 (Park Jihoon)",
+   "tier": "SILVER",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P006",
+   "name": "Emily Chen",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P007",
+   "name": "최유진 (Choi Yujin)",
+   "tier": "GOLD",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P008",
+   "name": "정하은 (Jung Haeun)",
+   "tier": "SILVER",
+   "vip": true,
+   "special_assistance": null
+  },
+  {
+   "id": "P009",
+   "name": "Michael Brown",
+   "tier": "GOLD",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P010",
+   "name": "강도윤 (Kang Doyoon)",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P011",
+   "name": "Ana Souza",
+   "tier": "SILVER",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P012",
+   "name": "윤서준 (Yoon Seojun)",
+   "tier": "GOLD",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P013",
+   "name": "한지민 (Han Jimin)",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": "WCHC"
+  },
+  {
+   "id": "P014",
+   "name": "오시우 (Oh Siwoo)",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": "UMNR"
+  },
+  {
+   "id": "P015",
+   "name": "임수아 (Lim Sua)",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P016",
+   "name": "David Kim",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P017",
+   "name": "송예준 (Song Yejun)",
+   "tier": "SILVER",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P018",
+   "name": "Yuki Tanaka",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P019",
+   "name": "김지우 (Kim Jiwoo)",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P020",
+   "name": "Olivia Martin",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P021",
+   "name": "이준호 (Lee Junho)",
+   "tier": "GOLD",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P022",
+   "name": "배수빈 (Bae Subin)",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P023",
+   "name": "Lucas Weber",
+   "tier": "SILVER",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P024",
+   "name": "조민서 (Cho Minseo)",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P025",
+   "name": "Hiroshi Sato",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P026",
+   "name": "신예린 (Shin Yerin)",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P027",
+   "name": "권태양 (Kwon Taeyang)",
+   "tier": "SILVER",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P028",
+   "name": "Sophie Laurent",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P029",
+   "name": "황보은 (Hwang Boeun)",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P030",
+   "name": "문재원 (Moon Jaewon)",
+   "tier": "GOLD",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P031",
+   "name": "Daniel Lee",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P032",
+   "name": "서하준 (Seo Hajun)",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P033",
+   "name": "Mei Wong",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P034",
+   "name": "유나래 (Yoo Narae)",
+   "tier": "SILVER",
+   "vip": false,
+   "special_assistance": null
+  },
+  {
+   "id": "P035",
+   "name": "장현우 (Jang Hyunwoo)",
+   "tier": "BASIC",
+   "vip": false,
+   "special_assistance": null
+  }
+ ],
+ "reservations": [
+  {
+   "pnr": "SX4GUZ",
+   "passenger_id": "P001",
+   "flight_no": "KE123",
+   "cabin": "BUSINESS",
+   "fare_class": "J",
+   "booked_days_before": 29,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "7CH49E",
+   "passenger_id": "P002",
+   "flight_no": "KE123",
+   "cabin": "BUSINESS",
+   "fare_class": "J",
+   "booked_days_before": 27,
+   "onward_flight_no": "JL006",
+   "onward_departure": "19:00",
+   "onward_destination": "JFK"
+  },
+  {
+   "pnr": "LRWQNT",
+   "passenger_id": "P003",
+   "flight_no": "KE123",
+   "cabin": "BUSINESS",
+   "fare_class": "C",
+   "booked_days_before": 57,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "Z6BC38",
+   "passenger_id": "P004",
+   "flight_no": "KE123",
+   "cabin": "BUSINESS",
+   "fare_class": "C",
+   "booked_days_before": 55,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "EKQYGM",
+   "passenger_id": "P005",
+   "flight_no": "KE123",
+   "cabin": "BUSINESS",
+   "fare_class": "D",
+   "booked_days_before": 52,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "TY5LV2",
+   "passenger_id": "P006",
+   "flight_no": "KE123",
+   "cabin": "BUSINESS",
+   "fare_class": "I",
+   "booked_days_before": 59,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "8DJ8AF",
+   "passenger_id": "P007",
+   "flight_no": "KE123",
+   "cabin": "BUSINESS",
+   "fare_class": "C",
+   "booked_days_before": 48,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "MSXUPU",
+   "passenger_id": "P008",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "B",
+   "booked_days_before": 26,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "27CG49",
+   "passenger_id": "P009",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "Y",
+   "booked_days_before": 30,
+   "onward_flight_no": "DL180",
+   "onward_departure": "18:30",
+   "onward_destination": "LAX"
+  },
+  {
+   "pnr": "FLYWHN",
+   "passenger_id": "P010",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "M",
+   "booked_days_before": 31,
+   "onward_flight_no": "SQ637",
+   "onward_departure": "17:45",
+   "onward_destination": "SIN"
+  },
+  {
+   "pnr": "UZDJW3",
+   "passenger_id": "P011",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "K",
+   "booked_days_before": 28,
+   "onward_flight_no": "UA902",
+   "onward_departure": "18:00",
+   "onward_destination": "HNL"
+  },
+  {
+   "pnr": "9ES6BG",
+   "passenger_id": "P012",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "B",
+   "booked_days_before": 33,
+   "onward_flight_no": "AC004",
+   "onward_departure": "21:00",
+   "onward_destination": "YVR"
+  },
+  {
+   "pnr": "NT7SQV",
+   "passenger_id": "P013",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "M",
+   "booked_days_before": 46,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "38LE5A",
+   "passenger_id": "P014",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "K",
+   "booked_days_before": 44,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "GMZ2JP",
+   "passenger_id": "P015",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "L",
+   "booked_days_before": 60,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "V2ENX4",
+   "passenger_id": "P016",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "Q",
+   "booked_days_before": 58,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "AFTACH",
+   "passenger_id": "P017",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "M",
+   "booked_days_before": 56,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "PU8WRW",
+   "passenger_id": "P018",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "L",
+   "booked_days_before": 54,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "49MJ6B",
+   "passenger_id": "P019",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "Q",
+   "booked_days_before": 53,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "HN9YKQ",
+   "passenger_id": "P020",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "L",
+   "booked_days_before": 51,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "W3NLY5",
+   "passenger_id": "P021",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "B",
+   "booked_days_before": 50,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "BG38DJ",
+   "passenger_id": "P022",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "Q",
+   "booked_days_before": 49,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "QVGUSX",
+   "passenger_id": "P023",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "K",
+   "booked_days_before": 47,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "5AVG7C",
+   "passenger_id": "P024",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "L",
+   "booked_days_before": 45,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "JPA4LR",
+   "passenger_id": "P025",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "Q",
+   "booked_days_before": 43,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "X4PQZ6",
+   "passenger_id": "P026",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "L",
+   "booked_days_before": 42,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "CH4CEK",
+   "passenger_id": "P027",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "M",
+   "booked_days_before": 41,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "RWHYTY",
+   "passenger_id": "P028",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "Q",
+   "booked_days_before": 40,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "6BWL8D",
+   "passenger_id": "P029",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "L",
+   "booked_days_before": 39,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "KQJ2MS",
+   "passenger_id": "P030",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "B",
+   "booked_days_before": 38,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "Y5XN27",
+   "passenger_id": "P031",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "Q",
+   "booked_days_before": 37,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "DJCAFL",
+   "passenger_id": "P032",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "L",
+   "booked_days_before": 36,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "SXRWUZ",
+   "passenger_id": "P033",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "Q",
+   "booked_days_before": 35,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "7C6J9E",
+   "passenger_id": "P034",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "M",
+   "booked_days_before": 34,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  },
+  {
+   "pnr": "LRK6NT",
+   "passenger_id": "P035",
+   "flight_no": "KE123",
+   "cabin": "ECONOMY",
+   "fare_class": "L",
+   "booked_days_before": 32,
+   "onward_flight_no": null,
+   "onward_departure": null,
+   "onward_destination": null
+  }
+ ]
+}
