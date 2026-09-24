@@ -1,5 +1,7 @@
 # Demo scenario — KE123 cancellation (≈ 3 minutes)
 
+[🇰🇷 국문 README의 데모 절](../README.md#데모) · **🇺🇸 English**
+
 ## Seed data (deterministic)
 
 **KE123 ICN 10:00 → NRT 12:20, CANCELLED** (AOG – hydraulic system, airline fault). 35 passengers:

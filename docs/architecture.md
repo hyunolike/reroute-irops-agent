@@ -1,5 +1,7 @@
 # ReRoute 아키텍처
 
+**🇰🇷 한국어** · [🇺🇸 English](architecture.en.md)
+
 ReRoute는 **추론**(Nemotron), **근거**(NeMo Retriever), **결정**(cuOpt), **기술적 통제**(OpenShell),
 **업무적 승인**(사람의 승인)을 명시적인 인터페이스를 가진 별도 구성요소로 분리합니다. 각각이 LLM 에이전트의 서로 다른 실패 모드를 막습니다.
 

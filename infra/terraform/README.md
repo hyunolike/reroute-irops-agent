@@ -1,11 +1,13 @@
 # ReRoute AWS 배포 (Terraform)
 
+**🇰🇷 한국어** · [🇺🇸 English](README.en.md)
+
 해커톤 데모 규모에 맞춘 **단일 호스트 배포**입니다. 규모는 작지만 운영 환경의 기본 원칙을 따릅니다:
 프라이빗 서브넷, SSH 없음(SSM 접속), IMDSv2 강제, 스토리지 암호화, Secrets Manager 비밀값 관리, 최소 권한 IAM.
 
 > **현재 검증 상태:** `terraform fmt -check`, `terraform validate`(AWS provider 5.80)는 통과했습니다. 템플릿을 GPU/CPU 두 경우로
 > 렌더링해 부트스트랩 스크립트 문법과 compose 파일도 확인했습니다. **실제 `terraform apply`는 아직 실행하지 않았습니다.**
-> 처음 배포할 때는 아래 [사전 점검](#배포-전-사전-점검-체크리스트)을 먼저 확인하세요.
+> 처음 배포할 때는 아래 [사전 점검](#4-배포-전-사전-점검-체크리스트)을 먼저 확인하세요.
 
 ## 1. 전체 구성
 

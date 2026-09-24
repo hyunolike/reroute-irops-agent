@@ -1,5 +1,7 @@
 # NVIDIA integration notes
 
+[🇰🇷 국문 README의 NVIDIA 절](../README.md#왜-nvidia인가) · **🇺🇸 English**
+
 All interfaces below were taken from NVIDIA's own sources (repositories' `docs/` folders, which build
 docs.nvidia.com, the NVIDIA skills catalog, and PyPI) — not guessed. Status legend:
 **Verified** = exercised by this repo's tests/runs · **Contract-tested** = request/response shape tested against

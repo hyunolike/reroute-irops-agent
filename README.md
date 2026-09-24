@@ -1,5 +1,7 @@
 # ReRoute — 자율 항공 비정상운항 복구 에이전트
 
+**🇰🇷 한국어** · [🇺🇸 English](README.en.md)
+
 **ReRoute: Autonomous Airline Disruption Recovery Agent** · NVIDIA Korea Agentic AI Hackathon 출품작
 
 > 운영자가 한 문장을 입력합니다 — *"KE123편이 결항됐어. 영향 승객을 확인하고 최적 재배정안을 만들어줘."*
@@ -17,10 +19,10 @@
 | 바로가기 | |
 |---|---|
 | 🎬 명령 한 줄로 데모 | `docker compose up --build` → http://localhost:3000 → **Run Agent** |
-| 📖 심사위원 3분 가이드 | http://localhost:3000/guide · [docs/demo-scenario.md](docs/demo-scenario.md) |
-| 🧭 아키텍처 (Mermaid 다이어그램 7종) | [docs/architecture.md](docs/architecture.md) |
-| 🟩 NVIDIA 연동 방식과 검증 수준 | [docs/nvidia-integration.md](docs/nvidia-integration.md) · [nvidia/](nvidia/) |
-| ☁️ AWS 배포 (Terraform) | [infra/terraform](infra/terraform) · 아래 [AWS 배포](#aws-배포) 절 |
+| 📖 심사위원 3분 가이드 | http://localhost:3000/guide · [발표 대본 (영문)](docs/demo-scenario.md) |
+| 🧭 아키텍처 (Mermaid 다이어그램 7종) | [docs/architecture.md](docs/architecture.md) · [English](docs/architecture.en.md) |
+| 🟩 NVIDIA 연동 방식과 검증 수준 | [docs/nvidia-integration.md (영문)](docs/nvidia-integration.md) · [nvidia/](nvidia/) |
+| ☁️ AWS 배포 (Terraform) | [infra/terraform/README.md](infra/terraform/README.md) · [English](infra/terraform/README.en.md) · 아래 [AWS 배포](#aws-배포) 절 |
 
 ---
 
