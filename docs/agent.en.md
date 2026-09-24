@@ -136,7 +136,7 @@ What does not vary: the validation rules, the solver result, and the approval bo
 ## 4. Who decides what
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph llm["🧠 Nemotron decides"]
         l1["which tool to call next"]
         l2["search wording · whether to search more"]

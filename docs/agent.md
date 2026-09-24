@@ -136,7 +136,7 @@ sequenceDiagram
 ## 4. 누가 무엇을 결정하는가
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph llm["🧠 Nemotron이 결정"]
         l1["다음에 호출할 도구"]
         l2["검색 질의 문구 · 추가 검색 여부"]
