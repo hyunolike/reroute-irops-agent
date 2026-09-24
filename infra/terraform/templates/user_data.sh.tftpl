@@ -1,0 +1,61 @@
+#!/bin/bash
+# ReRoute host bootstrap (rendered by Terraform). Contains NO secrets - they are fetched from
+# AWS Secrets Manager at boot with the instance role and written to a root-only .env file.
+set -euxo pipefail
+exec > >(tee /var/log/reroute-bootstrap.log) 2>&1
+
+REGION="${region}"
+APP_DIR=/opt/reroute
+mkdir -p "$APP_DIR"
+
+# --- docker + compose plugin (preinstalled on the Deep Learning AMI; installed on AL2023) ---
+if ! command -v docker >/dev/null 2>&1; then
+  if command -v dnf >/dev/null 2>&1; then dnf install -y docker; else curl -fsSL https://get.docker.com | sh; fi
+fi
+systemctl enable --now docker
+if ! docker compose version >/dev/null 2>&1; then
+  mkdir -p /usr/local/lib/docker/cli-plugins
+  curl -fsSL "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64" \
+    -o /usr/local/lib/docker/cli-plugins/docker-compose
+  chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+fi
+if ! command -v aws >/dev/null 2>&1; then
+  if command -v dnf >/dev/null 2>&1; then dnf install -y awscli; else apt-get update && apt-get install -y awscli; fi
+fi
+
+# --- secrets -> .env (0600) ---
+APP_SECRET=$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "${app_secret_arn}" --query SecretString --output text)
+NVIDIA_KEY=$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "${nvidia_secret_arn}" --query SecretString --output text 2>/dev/null || true)
+
+umask 077
+APP_SECRET="$APP_SECRET" NVIDIA_KEY="$NVIDIA_KEY" python3 - <<'PY' > "$APP_DIR/.env"
+import json, os
+s = json.loads(os.environ["APP_SECRET"])
+key = os.environ.get("NVIDIA_KEY", "").strip()
+llm = "${llm_provider}" if key else "mock"
+retriever = "${retriever_provider}" if key else "lexical"
+print(f"DATABASE_URL=postgresql+psycopg://reroute:{s['POSTGRES_PASSWORD']}@${db_host}:5432/reroute")
+print(f"APPROVAL_SIGNING_SECRET={s['APPROVAL_SIGNING_SECRET']}")
+print(f"AGENT_WORKER_TOKEN={s['AGENT_WORKER_TOKEN']}")
+print(f"NVIDIA_API_KEY={key}")
+print(f"LLM_PROVIDER={llm}")
+print(f"RETRIEVER_PROVIDER={retriever}")
+print("NIM_MODEL=${nim_model}")
+print("OPTIMIZATION_PROVIDER=${optimization}")
+print("CUOPT_BASE_URL=http://cuopt:5000")
+print("DEMO_MODE=${demo_mode}")
+print("AGENT_STEP_DELAY_MS=350")
+print("AIRLINE_API_BASE_URL=http://airline-service:8000")
+print("REROUTE_API_BASE_URL=http://reroute-api:8000")
+print("SECURITY_RUNTIME=policy-mirror")
+print("CORS_ORIGINS=")
+PY
+umask 022
+
+echo "${compose_b64}" | base64 -d > "$APP_DIR/docker-compose.yml"
+
+# --- pull & run ---
+aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "${registry}"
+cd "$APP_DIR"
+docker compose pull
+docker compose up -d

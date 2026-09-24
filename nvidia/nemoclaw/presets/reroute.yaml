@@ -1,0 +1,31 @@
+# NemoClaw network policy preset: lets a NemoClaw-managed assistant (OpenClaw / Hermes / Deep Agents)
+# operate ReRoute as an *operator copilot* - start recovery tasks and read plans/events/audit -
+# while it can never approve, reject or execute a plan (human-only, operator console).
+#   nemoclaw <sandbox> policy add --from-file nvidia/nemoclaw/presets/reroute.yaml
+preset:
+  name: reroute
+  description: "ReRoute IROPS recovery agent API (read + start tasks; approvals are human-only)"
+
+network_policies:
+  reroute:
+    name: reroute
+    endpoints:
+      - host: reroute-api
+        port: 8000
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/api/**" }
+          - allow: { method: POST, path: "/api/agent/tasks" }
+          - allow: { method: POST, path: "/api/security/probes" }
+        deny_rules:
+          - { method: POST, path: "/api/rebooking/plans/**" }
+          - { method: POST, path: "/api/demo/reset" }
+    binaries:
+      - { path: /usr/bin/curl }
+      - { path: /usr/local/bin/curl }
+      - { path: /usr/bin/node }
+      - { path: /usr/local/bin/node }
+      - { path: /usr/bin/python3* }
+      - { path: /usr/local/bin/python3* }
+      - { path: /sandbox/.venv/bin/python* }

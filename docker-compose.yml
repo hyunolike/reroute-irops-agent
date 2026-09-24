@@ -1,0 +1,105 @@
+# ReRoute - local / demo stack.
+#   docker compose up --build                     # demo mode (mock LLM, BM25, CPU solver, policy mirror)
+#   docker compose --profile gpu up --build       # + NVIDIA cuOpt server (needs NVIDIA GPU + container toolkit)
+#   docker compose --profile worker up --build    # agent in a separate worker (set AGENT_EXECUTION=remote)
+# Real NVIDIA mode: copy .env.example to .env and set NVIDIA_API_KEY, LLM_PROVIDER=nvidia, ...
+
+x-api-env: &api-env
+  DATABASE_URL: postgresql+psycopg://reroute:${POSTGRES_PASSWORD:-reroute}@postgres:5432/reroute
+  DEMO_MODE: ${DEMO_MODE:-true}
+  APPROVAL_SIGNING_SECRET: ${APPROVAL_SIGNING_SECRET:-change-me-local-only}
+  APPROVAL_TTL_MINUTES: ${APPROVAL_TTL_MINUTES:-30}
+  AIRLINE_API_BASE_URL: http://airline-service:8000
+  REROUTE_API_BASE_URL: http://reroute-api:8000
+  SECURITY_RUNTIME: ${SECURITY_RUNTIME:-policy-mirror}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: reroute
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-reroute}
+      POSTGRES_DB: reroute
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reroute -d reroute"]
+      interval: 5s
+      retries: 20
+    ports: ["5432:5432"]
+
+  # Mock Airline System (flights, manifest, inventory, token-guarded booking writes)
+  airline-service:
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    image: reroute-api:local
+    environment:
+      <<: *api-env
+      APP_ROLE: airline
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # Control plane: agent API + SSE, knowledge (RAG) & optimization services, approval gateway, audit
+  reroute-api:
+    image: reroute-api:local
+    environment:
+      <<: *api-env
+      APP_ROLE: control-plane
+      AGENT_EXECUTION: ${AGENT_EXECUTION:-inline}
+      AGENT_WORKER_TOKEN: ${AGENT_WORKER_TOKEN:-}
+      AGENT_STEP_DELAY_MS: ${AGENT_STEP_DELAY_MS:-350}
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      NIM_MODEL: ${NIM_MODEL:-nvidia/nemotron-3-super-120b-a12b}
+      RETRIEVER_PROVIDER: ${RETRIEVER_PROVIDER:-lexical}
+      OPTIMIZATION_PROVIDER: ${OPTIMIZATION_PROVIDER:-fallback}
+      CUOPT_BASE_URL: ${CUOPT_BASE_URL:-http://cuopt:5000}
+      CORS_ORIGINS: http://localhost:3000
+    ports: ["8000:8000"]
+    depends_on:
+      airline-service: { condition: service_healthy }
+
+  web:
+    build:
+      context: apps/web
+      args:
+        API_INTERNAL_URL: http://reroute-api:8000
+    image: reroute-web:local
+    ports: ["3000:3000"]
+    depends_on:
+      reroute-api: { condition: service_healthy }
+
+  # --- optional: NVIDIA cuOpt server (GPU). Set OPTIMIZATION_PROVIDER=cuopt.
+  cuopt:
+    profiles: ["gpu"]
+    image: ${CUOPT_IMAGE:-nvidia/cuopt:latest-cu12}
+    environment:
+      CUOPT_SERVER_PORT: "5000"
+    ports: ["5000:5000"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # --- optional: agent as a separate DB-less worker (what runs inside the OpenShell sandbox).
+  # Requires AGENT_EXECUTION=remote and AGENT_WORKER_TOKEN in .env.
+  agent-worker:
+    profiles: ["worker"]
+    image: reroute-api:local
+    command: ["python", "-m", "app.agent.worker"]
+    environment:
+      AIRLINE_API_BASE_URL: http://airline-service:8000
+      REROUTE_API_BASE_URL: http://reroute-api:8000
+      AGENT_WORKER_TOKEN: ${AGENT_WORKER_TOKEN:-}
+      AGENT_STEP_DELAY_MS: ${AGENT_STEP_DELAY_MS:-350}
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      NIM_MODEL: ${NIM_MODEL:-nvidia/nemotron-3-super-120b-a12b}
+      SECURITY_RUNTIME: ${SECURITY_RUNTIME:-policy-mirror}
+    healthcheck: { disable: true }
+    depends_on:
+      reroute-api: { condition: service_healthy }
+
+volumes:
+  pgdata:

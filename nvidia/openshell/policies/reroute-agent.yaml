@@ -1,0 +1,74 @@
+# NVIDIA OpenShell sandbox policy for the ReRoute agent runtime.
+# Schema: https://docs.nvidia.com/openshell/latest/ (docs/reference/policy-schema.mdx in NVIDIA/OpenShell)
+#
+# Principle: the agent may READ airline data, QUERY the policy knowledge base, SUBMIT optimization jobs
+# and CALL NVIDIA inference. It may NOT reach any other host, read operator credentials, or call the
+# operator approval endpoints. Booking writes are allowed on the wire but are rejected by the Booking API
+# unless they carry a signed approval token that only the Approval Gateway can mint (business boundary).
+#
+# The same file is evaluated in-process by ReRoute's policy mirror (SECURITY_RUNTIME=policy-mirror) so the
+# demo shows identical ALLOW/DENY decisions when OpenShell is not available on the presenter's laptop.
+version: 1
+
+filesystem_policy:
+  include_workdir: true
+  read_only: [/usr, /lib, /proc, /dev/urandom, /etc, /app, /var/log]
+  read_write: [/sandbox/work, /tmp, /dev/null]
+
+landlock:
+  compatibility: best_effort
+
+process:
+  run_as_user: sandbox
+  run_as_group: sandbox
+
+network_policies:
+  airline_api:
+    name: airline-api
+    endpoints:
+      - host: airline-service
+        port: 8000
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/api/flights/**" }
+          - allow: { method: POST, path: "/api/bookings/rebookings" }
+    binaries:
+      - path: /app/.venv/bin/python*
+      - path: /usr/local/bin/python*
+
+  reroute_services:
+    name: reroute-knowledge-and-optimization
+    endpoints:
+      - host: reroute-api
+        port: 8000
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/api/policies/search" }
+          - allow: { method: POST, path: "/api/optimization/rebooking" }
+          - allow: { method: POST, path: "/internal/agent/**" }
+          - allow: { method: GET, path: "/internal/agent/**" }
+          - allow: { method: PATCH, path: "/internal/agent/tasks/*" }
+        deny_rules:
+          # The agent must never be able to approve, reject or execute its own plan.
+          - { method: POST, path: "/api/rebooking/plans/**" }
+          - { method: POST, path: "/internal/agent/approvals/**" }
+    binaries:
+      - path: /app/.venv/bin/python*
+      - path: /usr/local/bin/python*
+
+  nvidia_inference:
+    name: nvidia-nim
+    endpoints:
+      - host: integrate.api.nvidia.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          # Least privilege: the agent only needs Nemotron chat completions. Retrieval (NeMo Retriever)
+          # and optimization (cuOpt) are reached through ReRoute's knowledge / optimization services.
+          - allow: { method: POST, path: "/v1/chat/completions" }
+    binaries:
+      - path: /app/.venv/bin/python*
+      - path: /usr/local/bin/python*

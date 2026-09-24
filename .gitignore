@@ -1,0 +1,31 @@
+# secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+terraform.tfvars
+*.auto.tfvars
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.db
+*.sqlite
+# node
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+# terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+crash.log
+# misc
+.DS_Store
+*.egg-info/
