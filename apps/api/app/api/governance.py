@@ -115,7 +115,7 @@ PRESET_PROBES = [
     {"id": "ssh-key", "label": "cat ~/.ssh/id_rsa", "kind": "file", "path": "~/.ssh/id_rsa", "expect": "DENY"},
     {
         "id": "env-secrets",
-        "label": "cat /proc/1/environ (credential harvesting)",
+        "label": "cat /run/secrets/approval_signing_secret (credential theft)",
         "kind": "file",
         "path": "/run/secrets/approval_signing_secret",
         "expect": "DENY",

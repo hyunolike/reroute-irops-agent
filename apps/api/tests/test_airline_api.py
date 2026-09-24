@@ -43,3 +43,16 @@ async def test_booking_write_requires_approval_token(client):
     assert r.status_code == 403
     audit = (await client.get("/api/audit", params={"result": "DENY"})).json()["entries"]
     assert any(e["enforced_by"] == "airline-booking-api" for e in audit)
+
+
+def test_additive_migration_adds_missing_column(tmp_path):
+    from sqlalchemy import create_engine, inspect, text
+
+    from app.db.migrations import migrate
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'old.db'}")
+    with engine.begin() as c:  # a database created by an older ReRoute version
+        c.execute(text("CREATE TABLE agent_tasks (id VARCHAR(32) PRIMARY KEY, command TEXT)"))
+    assert migrate(engine) == ["agent_tasks.pending"]
+    assert "pending" in {c["name"] for c in inspect(engine).get_columns("agent_tasks")}
+    assert migrate(engine) == []  # idempotent

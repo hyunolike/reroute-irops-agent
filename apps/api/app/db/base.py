@@ -41,6 +41,9 @@ class Database:
         from app.db import models  # noqa: F401  (register mappers)
 
         Base.metadata.create_all(self.engine)
+        from app.db.migrations import migrate
+
+        migrate(self.engine)
 
     def drop_all(self) -> None:
         Base.metadata.drop_all(self.engine)
