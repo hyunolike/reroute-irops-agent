@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "reroute-api"
 version = "0.1.0"
@@ -21,6 +25,9 @@ dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
 # NVIDIA cuOpt thin client (talks to a self-hosted cuOpt server). Optional: the
 # CuOptOptimizationProvider speaks the documented REST API directly via httpx.
 cuopt = ["cuopt-sh-client"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

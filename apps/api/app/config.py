@@ -10,7 +10,14 @@ from typing import Literal
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_DEFAULT_ROOT = Path(__file__).resolve().parents[3]
+
+def _default_root() -> Path:
+    """Repo root in a checkout (apps/api/app/config.py -> ../../..); /app in the container (PROJECT_ROOT)."""
+    here = Path(__file__).resolve()
+    return here.parents[3] if len(here.parents) > 3 and (here.parents[3] / "documents").exists() else here.parents[1]
+
+
+_DEFAULT_ROOT = _default_root()
 
 
 class Settings(BaseSettings):

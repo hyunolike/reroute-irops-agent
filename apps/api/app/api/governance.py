@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from typing import Literal
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -198,6 +199,9 @@ def demo_reset(c: Container = Depends(get_container)) -> dict:
         s.commit()
         if c.settings.app_role in ("all", "airline"):
             result = seed_database(s, c.settings.seed_path, c.settings.demo_service_date, reset=True)
-        else:
-            result = {"seeded": False, "reason": "airline data is owned by airline-service"}
+    if c.settings.app_role == "control-plane":
+        # Airline data is owned by the airline service - ask it to reseed its own tables.
+        r = httpx.post(f"{c.settings.airline_api_base_url.rstrip('/')}/api/demo/reset", timeout=30)
+        r.raise_for_status()
+        result = r.json()
     return {"reset": True, **result}

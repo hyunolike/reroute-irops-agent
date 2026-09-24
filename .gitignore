@@ -28,3 +28,4 @@ next-env.d.ts
 crash.log
 # misc
 .DS_Store
+*.egg-info/
