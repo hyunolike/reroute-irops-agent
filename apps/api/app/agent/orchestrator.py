@@ -8,6 +8,7 @@ that the dashboard streams over SSE.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -41,6 +42,8 @@ class AgentOrchestrator:
         http: GovernedHttpClient,
         agent_name: str,
         security_component: Component,
+        component_overrides: dict[str, Component] | None = None,
+        step_delay_ms: int = 0,
     ) -> None:
         self.repo = repo
         self.llm = llm
@@ -49,6 +52,9 @@ class AgentOrchestrator:
         self.http = http
         self.agent = agent_name
         self.security_component = security_component
+        # Badge each tool with the provider that is ACTUALLY configured (never claim NVIDIA when on fallback)
+        self.component_overrides = component_overrides or {}
+        self.step_delay_ms = step_delay_ms
         self._state: dict[str, str] = {}
 
     # ------------------------------------------------------------------ helpers
@@ -183,10 +189,11 @@ class AgentOrchestrator:
         if not tool.requires_approval:
             self._set_state(task_id, tool.state)
         args_view = args.model_dump(mode="json")
+        component = self.component_overrides.get(tc.name, tool.component)
         self._emit(
             task_id,
             EventType.TOOL_CALL,
-            tool.component,
+            component,
             f"{tc.name}({_fmt_args(args_view)})",
             {"tool": tc.name, "args": args_view},
         )
@@ -212,13 +219,15 @@ class AgentOrchestrator:
             )
             return json.dumps({"error": str(e), "code": e.code})
         except (ToolError, Exception) as e:  # noqa: BLE001
-            self._emit(task_id, EventType.TOOL_ERROR, tool.component, f"{tc.name} failed: {e}", {"tool": tc.name})
+            self._emit(task_id, EventType.TOOL_ERROR, component, f"{tc.name} failed: {e}", {"tool": tc.name})
             return json.dumps({"error": str(e)})
         ms = (time.perf_counter() - start) * 1000
+        if self.step_delay_ms:
+            await asyncio.sleep(self.step_delay_ms / 1000)  # demo pacing only - keeps the live timeline readable
         self._emit(
             task_id,
             EventType.TOOL_RESULT,
-            result.component or tool.component,
+            result.component or component,
             result.title,
             {"tool": tc.name, **result.detail},
             ms,

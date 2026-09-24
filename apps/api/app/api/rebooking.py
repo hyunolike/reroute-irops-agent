@@ -114,7 +114,10 @@ async def approve(
         details={"approval_id": approval.id, "manual_items": approval.approved_manual_item_ids},
     )
     plan = c.gateway.get_plan(plan_id)
-    c.runner.submit(c.orchestrator.resume_after_approval(plan.task_id, plan_id))
+    if c.settings.agent_execution == "remote":
+        c.repo.update_task(plan.task_id, pending="resume")
+    else:
+        c.runner.submit(c.orchestrator.resume_after_approval(plan.task_id, plan_id))
     return _load(c, plan_id)
 
 

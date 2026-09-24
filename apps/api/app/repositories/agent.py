@@ -68,6 +68,23 @@ class AgentRepository:
             s.refresh(ev)
             return ev
 
+    def claim_pending(self) -> tuple[AgentTask, str] | None:
+        """Atomically claim the oldest task with queued work (optimistic compare-and-set)."""
+        with self.db.session() as s:
+            for task in s.scalars(
+                select(AgentTask).where(AgentTask.pending.is_not(None)).order_by(AgentTask.updated_at).limit(5)
+            ):
+                action = task.pending
+                n = (
+                    s.query(AgentTask)
+                    .filter(AgentTask.id == task.id, AgentTask.pending == action)
+                    .update({AgentTask.pending: None}, synchronize_session=False)
+                )
+                s.commit()
+                if n == 1:
+                    return s.get(AgentTask, task.id), action
+        return None
+
     def events(self, task_id: str, after_seq: int = 0) -> list[AgentEvent]:
         with self.db.session() as s:
             q = select(AgentEvent).where(AgentEvent.task_id == task_id, AgentEvent.seq > after_seq).order_by(AgentEvent.seq)

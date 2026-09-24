@@ -149,6 +149,13 @@ class Container:
             http=self.http,
             agent_name=settings.agent_name,
             security_component=self.security_component,
+            component_overrides={
+                "search_rebooking_policy": Component.NEMO_RETRIEVER
+                if self.knowledge.primary.nvidia
+                else Component.LEXICAL_RETRIEVER,
+                "optimize_rebooking": Component.CUOPT if self.optimization.primary.provider.nvidia else Component.FALLBACK_SOLVER,
+            },
+            step_delay_ms=settings.agent_step_delay_ms,
         )
 
     def runtime_info(self) -> dict[str, Any]:
@@ -178,5 +185,6 @@ class Container:
                 else "ReRoute policy mirror (same OpenShell policy file, in-process)",
             },
             "approval": {"ttl_minutes": s.approval_ttl_minutes, "required_for": ["execute_rebooking"]},
+            "agent": {"execution": s.agent_execution},
             "tools": [{"name": t, "mutating": self.tools.get(t).mutating} for t in self.tools.names()],
         }

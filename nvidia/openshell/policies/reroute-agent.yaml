@@ -49,6 +49,7 @@ network_policies:
           - allow: { method: POST, path: "/api/optimization/rebooking" }
           - allow: { method: POST, path: "/internal/agent/**" }
           - allow: { method: GET, path: "/internal/agent/**" }
+          - allow: { method: PATCH, path: "/internal/agent/tasks/*" }
         deny_rules:
           # The agent must never be able to approve, reject or execute its own plan.
           - { method: POST, path: "/api/rebooking/plans/**" }

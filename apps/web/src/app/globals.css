@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: #070b12;
+  color: #e2e8f0;
+}
+
+body {
+  background-image:
+    radial-gradient(1200px 600px at 85% -10%, rgba(118, 185, 0, 0.08), transparent 60%),
+    radial-gradient(900px 500px at -10% 10%, rgba(56, 189, 248, 0.05), transparent 60%);
+  background-attachment: fixed;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e2a3d;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

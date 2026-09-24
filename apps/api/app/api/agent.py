@@ -56,7 +56,10 @@ def event_view(e: AgentEvent) -> dict:
 @router.post("/tasks", status_code=202)
 async def create_task(body: TaskCreate, c: Container = Depends(get_container)) -> dict:
     task = c.repo.create_task(body.command, runtime=c.runtime_info())
-    c.runner.submit(c.orchestrator.run(task.id))
+    if c.settings.agent_execution == "remote":
+        task = c.repo.update_task(task.id, pending="run")  # claimed by the sandboxed worker
+    else:
+        c.runner.submit(c.orchestrator.run(task.id))
     return task_view(task)
 
 

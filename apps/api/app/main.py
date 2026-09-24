@@ -9,7 +9,7 @@ import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import agent, airline, governance, platform, rebooking
+from app.api import agent, airline, governance, internal, platform, rebooking
 from app.config import Settings, get_settings
 from app.container import Container
 from app.seed.loader import seed_database
@@ -49,5 +49,6 @@ def create_app(settings: Settings | None = None, *, internal_transport: httpx.As
         app.include_router(agent.router)
         app.include_router(platform.router)
         app.include_router(rebooking.router)
+        app.include_router(internal.router)
     app.include_router(governance.router)
     return app

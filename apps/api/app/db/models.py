@@ -94,6 +94,8 @@ class AgentTask(Base):
     flight_no: Mapped[str | None] = mapped_column(String(16), nullable=True)
     state: Mapped[str] = mapped_column(String(32), default="RECEIVED")
     plan_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Work queued for a remote agent worker (AGENT_EXECUTION=remote): "run" | "resume" | None
+    pending: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     runtime: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     report: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)

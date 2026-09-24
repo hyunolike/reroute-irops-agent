@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     airline_api_base_url: str = "http://localhost:8000"
     reroute_api_base_url: str = "http://localhost:8000"
     agent_name: str = "reroute-agent"
+    # "inline": the API process runs the agent. "remote": a separate worker (e.g. inside an OpenShell
+    # sandbox) claims tasks over HTTP and has no database access and no approval-signing secret.
+    agent_execution: Literal["inline", "remote"] = "inline"
+    agent_worker_token: SecretStr | None = None
+    worker_poll_seconds: float = 1.0
+    # Cosmetic pause after each tool result so a live demo timeline is readable (0 = off)
+    agent_step_delay_ms: int = 0
 
     # --- LLM: NVIDIA NIM (Nemotron) or deterministic mock ---
     llm_provider: Literal["nvidia", "mock"] = "mock"
