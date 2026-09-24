@@ -93,6 +93,18 @@ variable "certificate_arn" {
   default     = ""
 }
 
+variable "public_hostname" {
+  description = "DNS name that points at the ALB (e.g. reroute.example.com). Needed with certificate_arn for the HTTPS MCP endpoint NemoClaw requires."
+  type        = string
+  default     = ""
+}
+
+variable "enable_mcp" {
+  description = "Expose ReRoute tools as an MCP server at /mcp for external agents (OpenClaw in NemoClaw)."
+  type        = bool
+  default     = true
+}
+
 variable "allowed_ingress_cidrs" {
   description = "Who may reach the ALB. Restrict to your judges/office IPs for a private demo."
   type        = list(string)

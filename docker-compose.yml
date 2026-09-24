@@ -49,6 +49,9 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-auto}
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
       NIM_MODEL: ${NIM_MODEL:-nvidia/nemotron-3-super-120b-a12b}
+      REROUTE_MCP_TOKEN: ${REROUTE_MCP_TOKEN:-}
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-localhost:*,127.0.0.1:*,reroute-api:*}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
       RETRIEVER_PROVIDER: ${RETRIEVER_PROVIDER:-lexical}
       OPTIMIZATION_PROVIDER: ${OPTIMIZATION_PROVIDER:-fallback}
       CUOPT_BASE_URL: ${CUOPT_BASE_URL:-http://cuopt:5000}

@@ -17,6 +17,11 @@ resource "random_password" "worker_token" {
   special = false
 }
 
+resource "random_password" "mcp_token" {
+  length  = 48
+  special = false
+}
+
 resource "aws_secretsmanager_secret" "app" {
   name                    = "${var.name}/${var.environment}/app"
   description             = "ReRoute generated secrets (DB password, approval signing key, worker token)"
@@ -29,6 +34,7 @@ resource "aws_secretsmanager_secret_version" "app" {
     POSTGRES_PASSWORD       = random_password.db.result
     APPROVAL_SIGNING_SECRET = random_password.approval_signing.result
     AGENT_WORKER_TOKEN      = random_password.worker_token.result
+    REROUTE_MCP_TOKEN       = random_password.mcp_token.result
   })
 }
 

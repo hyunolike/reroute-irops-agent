@@ -23,7 +23,8 @@ export type Component =
   | "fallback-solver"
   | "approval-gateway"
   | "openshell"
-  | "policy-mirror";
+  | "policy-mirror"
+  | "external-agent";
 
 export interface AgentEvent {
   id: number;
@@ -53,7 +54,7 @@ export interface Task {
   state: AgentState;
   flight_no: string | null;
   plan_id: string | null;
-  runtime: Runtime & { planner_fallback?: string };
+  runtime: Runtime & { planner_fallback?: string; planner?: string; planner_client?: string; delegated_by?: string };
   report: Record<string, any> | null;
   error: string | null;
   created_at: string;

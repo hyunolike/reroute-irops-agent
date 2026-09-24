@@ -29,7 +29,7 @@
 
 ## 목차
 1. [문제](#문제) · 2. [해결책](#해결책) · 3. [왜 Agentic AI인가](#왜-agentic-ai인가) · 4. [왜 NVIDIA인가](#왜-nvidia인가)
-5. [아키텍처](#아키텍처) · [LLM 에이전트 동작 방식](#llm-에이전트-동작-방식) · 6. [NVIDIA 스택과 실행 모드](#nvidia-스택과-실행-모드) · 7. [데모](#데모) · 8. [시작하기](#시작하기)
+5. [아키텍처](#아키텍처) · [LLM 에이전트 동작 방식](#llm-에이전트-동작-방식) · [NemoClaw·OpenClaw 연동](#nemoclaw--openclaw-연동-mcp) · 6. [NVIDIA 스택과 실행 모드](#nvidia-스택과-실행-모드) · 7. [데모](#데모) · 8. [시작하기](#시작하기)
 9. [AWS 배포](#aws-배포) · 10. [보안](#보안) · 11. [최적화 모델](#최적화-모델) · 12. [화면](#화면) · 13. [향후 계획](#향후-계획)
 
 ---
@@ -94,7 +94,7 @@ VIP 평균 지연 5시간 40분 → 4시간**입니다. 전체 평균 지연은 
 | **NeMo Retriever** (RAG) | 재예약·운임·VIP·MCT·IROPS 규정 검색, 정책 ID·문서·점수 출처 제공 | 지어낸 규정 |
 | **cuOpt** | 승객×항공편×좌석등급 0-1 MILP로 최종 배정 계산 (결과의 기준값) | LLM의 임의 배정·제약 위반 |
 | **OpenShell** | 에이전트 샌드박스: 외부 통신·L7 규칙·파일시스템·프로세스·자격증명 격리 | 과도한 권한·데이터 유출 |
-| **NemoClaw** | 운영자 코파일럿의 통제된 실행 환경 (정책 프리셋 + 스킬) | 통제 없는 상시 에이전트 |
+| **NemoClaw · OpenClaw** | OpenClaw가 MCP로 ReRoute 도구를 사용 (NemoClaw가 OpenShell 정책·자격증명 주입 관리) | 통제 없는 상시 에이전트 |
 | **NVIDIA Skills** | `cuopt-numerical-optimization-formulation`, `cuopt-server-api-python`, `nemo-retriever` 규약을 따라 구현 | 추측한 API |
 
 > NVIDIA API는 추측하지 않았습니다. NIM·cuOpt·OpenShell·NemoClaw·Retriever 인터페이스는 NVIDIA 공식 저장소의 문서 원본과
@@ -152,6 +152,34 @@ OPTIMIZING → GENERATING_PROPOSAL → WAITING_APPROVAL → EXECUTING → COMPLE
 > 현재 상태: 실제 Nemotron으로 실행한 결과는 아직 없습니다(이 개발 환경에는 키가 없고 NVIDIA 엔드포인트 접속도 막혀 있음).
 > 실제 모델의 불완전한 행동(도구 하나씩 호출, 순서 오류, 인자 형식 오류, 중간 멈춤)을 흉내 낸 테스트로 끝까지 완료되는 것은 검증했습니다.
 
+## NemoClaw · OpenClaw 연동 (MCP)
+
+ReRoute의 도구를 **MCP 서버**(`/mcp`)로 공개해서, **NVIDIA NemoClaw 샌드박스 안의 OpenClaw**가 두뇌가 되어 ReRoute를 쓰게 할 수 있습니다.
+OpenClaw가 부르는 모든 도구는 ReRoute 에이전트와 **같은 검증 · 사전 조건 · 상태 머신 · 감사 로그**를 거치고, MCP에는 승인·실행 도구가 아예 없습니다.
+
+```mermaid
+flowchart LR
+    op([운영자]) -->|대화| oc
+    subgraph nemo["NVIDIA NemoClaw 샌드박스 (OpenShell)"]
+        oc["OpenClaw<br/>Nemotron 추론"]
+    end
+    oc -->|"MCP · HTTPS · Bearer<br/>(OpenShell protocol: mcp 정책)"| mcp["ReRoute /mcp<br/>도구 12종"]
+    mcp --> orch["ReRoute 오케스트레이터<br/>검증 · 사전조건 · 상태 · 이벤트"]
+    orch --> svc["항공사 API · NeMo Retriever · cuOpt"]
+    orch --> dash["대시보드<br/>외부 에이전트 작업 실시간 표시"]
+    op -->|"승인 / 반려 (사람만)"| dash
+```
+
+```bash
+nemoclaw ops-copilot mcp add reroute --url https://<도메인>/mcp --env REROUTE_MCP_TOKEN   # HTTPS 필수
+nemoclaw ops-copilot skill install nvidia/skills/reroute-irops
+REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://<도메인>/mcp                       # 연결 전 점검
+```
+
+- 두 가지 방식: OpenClaw가 **직접 계획**(`open_recovery_task` → 도구들 → `propose_rebooking`)하거나, ReRoute 에이전트에게 **위임**(`delegate_recovery`)합니다.
+- 대시보드는 외부 에이전트가 시작한 작업을 감지해 "실시간으로 보기" 배너를 띄웁니다.
+- 검증 상태: MCP 서버는 실제 HTTP로 테스트했습니다(구·신 프로토콜 모두, 가드레일·승인 경계 포함). **실제 NemoClaw/OpenClaw 샌드박스와의 연결은 아직 실행하지 않았습니다**(이 환경에 NemoClaw·HTTPS 엔드포인트 없음). 절차: [nvidia/nemoclaw](nvidia/nemoclaw/README.md)
+
 ## NVIDIA 스택과 실행 모드
 
 | 환경 변수 | 실제 NVIDIA 모드 | 데모 / 대체(Fallback) 모드 |
@@ -197,7 +225,7 @@ open http://localhost:3000      # API 문서: http://localhost:8000/docs
 
 ```bash
 make install                    # uv 가상환경(Python 3.12) + npm ci
-make test                       # 백엔드 테스트 84개
+make test                       # 백엔드 테스트 91개
 DATABASE_URL=sqlite:///./reroute.db make dev-api    # 또는 로컬 PostgreSQL
 make dev-web                    # http://localhost:3000 (/api는 :8000으로 프록시)
 ```
@@ -309,6 +337,7 @@ C6  항공사·시간 한도·운항 상태가 규정상 허용   (IROP-002, IRO
 | ![시작 화면](docs/screenshots/01-welcome.png) 문제 정의와 5가지 핵심 | ![실행 중](docs/screenshots/02-agent-running.png) 에이전트 실행 — 실시간 도구 타임라인 |
 | ![완료](docs/screenshots/05-completed.png) 승인 → 실행, 최종 보고 | ![보안](docs/screenshots/06-security-audit.png) OpenShell 정책 판정과 감사 로그 |
 | ![우회 차단](docs/screenshots/04-bypass-blocked.png) 승인 없이 실행 → 403 | ![조치 불필요](docs/screenshots/07-no-action.png) KE125 지연: 에이전트가 조치 불필요로 판단 |
+| ![외부 에이전트 감지](docs/screenshots/09-external-agent-banner.png) MCP로 시작된 외부 에이전트 작업 감지 | ![외부 에이전트 재배정안](docs/screenshots/10-external-agent-plan.png) 외부 에이전트가 계획한 재배정안 (승인은 사람) |
 
 전체 화면: [재배정안](docs/screenshots/03b-plan-full.png) · [완료](docs/screenshots/05b-completed-full.png) · [심사위원 가이드](docs/screenshots/08-guide.png)
 
@@ -316,7 +345,7 @@ C6  항공사·시간 한도·운항 상태가 규정상 허용   (IROP-002, IRO
 
 ```
 apps/api      FastAPI: Mock 항공사 API, 에이전트(오케스트레이터·도구·LLM 어댑터), RAG, 최적화,
-              승인 게이트웨이, 감사 로그, OpenShell 정책 평가, worker — 테스트 84개
+              승인 게이트웨이, 감사 로그, OpenShell 정책 평가, worker, MCP 서버 — 테스트 91개
 apps/web      Next.js + TypeScript + Tailwind 운영 대시보드와 심사위원 가이드
 documents     항공사 규정 문서 (IROP, RBK, SSR, FARE, VIP, MCT) + 기계가 읽는 파라미터
 data/seed     KE123 시나리오: 항공편 9편, 승객 35명
@@ -329,7 +358,7 @@ tests/e2e     MVP 완료 기준 자동 점검
 
 ## 품질
 
-- 백엔드 테스트 84개: 운항·승객 조회, 규정 검색과 출처, 최적화 제약 C1–C6 전부, 가중치, cuOpt REST 형식,
+- 백엔드 테스트 91개: 운항·승객 조회, 규정 검색과 출처, 최적화 제약 C1–C6 전부, 가중치, cuOpt REST 형식,
   승인 필수, 무단 실행 차단, 토큰 변조, 승인 만료, 재배정 성공, OpenShell 정책 스키마와 판정, NIM 요청 형식과 장애 시 전환,
   DB 없는 원격 worker(실제 HTTP), 스키마 마이그레이션.
 - 전체 흐름 자동 점검(`tests/e2e/smoke.sh`)과 Playwright 브라우저 시연.

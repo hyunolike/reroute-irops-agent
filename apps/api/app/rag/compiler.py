@@ -8,7 +8,17 @@ from __future__ import annotations
 
 from app.domain.models import PolicyHit, PolicyRules
 
-REQUIRED_RULES = ("own_carrier_first", "interline", "max_delay", "mct", "connection_risk", "ssr", "coterminal")
+REQUIRED_RULES = (
+    "own_carrier_first",
+    "interline",
+    "max_delay",
+    "mct",
+    "connection_risk",
+    "ssr",
+    "coterminal",
+    "preserve_cabin",  # C3 business cabin protection (FARE-002)
+    "vip_priority",  # VIP delay / downgrade weighting (VIP-001)
+)
 
 # What to search for when a required rule is still missing (returned to the planner as a hint).
 SUGGESTED_QUERIES = {
@@ -19,6 +29,8 @@ SUGGESTED_QUERIES = {
     "connection_risk": "at-risk connection margin review",
     "ssr": "special assistance passengers wheelchair unaccompanied minor",
     "coterminal": "co-terminal airports",
+    "preserve_cabin": "business class cabin downgrade",
+    "vip_priority": "VIP priority during re-accommodation",
 }
 
 # Conservative defaults when a required policy was not retrieved.
@@ -29,6 +41,9 @@ _CONSERVATIVE = {
     "connection_risk": {"connection_risk_buffer_minutes": 60},
     "ssr": {"manual_confirmation_ssr": ["WCHR", "WCHC", "UMNR", "MEDA"], "own_carrier_only_ssr": ["WCHC", "UMNR", "MEDA"]},
     "coterminal": {"allow_coterminal": False},
+    # passenger-protective defaults when the governing policy was not retrieved
+    "preserve_cabin": {"preserve_cabin": True},
+    "vip_priority": {"vip_priority": True},
 }
 
 _FIELDS = set(PolicyRules.model_fields) - {"applied", "missing"}

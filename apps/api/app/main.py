@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import agent, airline, governance, internal, platform, rebooking
 from app.config import Settings, get_settings
 from app.container import Container
+from app.integrations.mcp_server import mount_mcp
 from app.seed.loader import seed_database
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -27,7 +28,12 @@ def create_app(settings: Settings | None = None, *, internal_transport: httpx.As
         if settings.seed_on_startup and settings.app_role in ("all", "airline"):
             with c.db.session() as s:
                 logging.getLogger("reroute").info("seed: %s", seed_database(s, settings.seed_path, settings.demo_service_date))
-        yield
+        mcp_server = app.state.mcp_server
+        if mcp_server is not None:
+            async with mcp_server.session_manager.run():
+                yield
+        else:
+            yield
         await c.runner.drain()
 
     app = FastAPI(
@@ -50,5 +56,6 @@ def create_app(settings: Settings | None = None, *, internal_transport: httpx.As
         app.include_router(platform.router)
         app.include_router(rebooking.router)
         app.include_router(internal.router)
+    app.state.mcp_server = mount_mcp(app, app.state.container) if settings.app_role in ("all", "control-plane") else None
     app.include_router(governance.router)
     return app

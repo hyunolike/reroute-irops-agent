@@ -14,6 +14,7 @@ For the overall system and deployment see [architecture.en.md](architecture.en.m
 | [5. What the LLM sees and does not see](#5-what-the-llm-sees-and-does-not-see) | data never passes through the LLM |
 | [6. Recovery paths](#6-recovery-paths) | when the model is wrong or stops |
 | [7. Two execution modes](#7-two-execution-modes) | inside the API vs sandboxed worker |
+| [8. External agent mode](#8-external-agent-mode-openclaw--mcp) | OpenClaw in NemoClaw uses ReRoute over MCP |
 
 ---
 
@@ -232,7 +233,41 @@ flowchart LR
 With `AGENT_EXECUTION=remote` the agent is a separate process inside the sandbox. Even a compromised agent cannot change
 bookings without a human approval.
 
+## 8. External agent mode (OpenClaw → MCP)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Op as Operator
+    participant OC as OpenClaw<br/>(NemoClaw sandbox)
+    participant P as OpenShell proxy
+    participant MCP as ReRoute /mcp
+    participant O as Orchestrator
+    participant D as Dashboard
+
+    Op->>OC: "KE123 is cancelled, build the rebooking plan"
+    OC->>P: tools/call open_recovery_task
+    P->>P: protocol: mcp policy check · bearer token injected
+    P->>MCP: forward
+    MCP->>O: open external-planner session
+    O-->>D: "task started by external agent"
+    loop OpenClaw plans
+        OC->>MCP: get_disrupted_flight / search_rebooking_policy / optimize_rebooking …
+        MCP->>O: same validation · preconditions · state machine
+        O-->>MCP: result or error + next_step_hint
+        MCP-->>OC: observation
+    end
+    OC->>MCP: propose_rebooking
+    O-->>D: waiting for approval (PENDING)
+    Note over OC,MCP: no approve / execute tool exists over MCP
+    Op->>D: approve
+    D->>O: execute → approval-gateway token → Booking API
+```
+
+Even with an external brain, ReRoute's rules hold: no optimization without policy coverage, no "no action" without the facts,
+and only humans approve.
+
 ---
 
 Code: `apps/api/app/agent/orchestrator.py` (loop · guardrails) · `app/agent/prompts.py` (rules) · `app/tools/` (8 tools) ·
-`app/providers/llm/` (Nemotron adapter · selection) · `app/agent/worker.py` (sandbox worker) · `app/agent/evaluate.py` (real-model evaluation)
+`app/providers/llm/` (Nemotron adapter · selection) · `app/agent/worker.py` (sandbox worker) · `app/agent/evaluate.py` (real-model evaluation) · `app/integrations/mcp_server.py` (MCP server)

@@ -14,6 +14,7 @@
 | [5. LLM이 보는 것과 보지 않는 것](#5-llm이-보는-것과-보지-않는-것) | 데이터가 LLM을 거치지 않는 구조 |
 | [6. 실수했을 때의 복구 경로](#6-실수했을-때의-복구-경로) | 모델이 틀리거나 멈출 때 |
 | [7. 두 가지 실행 형태](#7-두-가지-실행-형태) | API 안에서 실행 vs 샌드박스 worker |
+| [8. 외부 에이전트 모드](#8-외부-에이전트-모드-openclaw--mcp) | NemoClaw의 OpenClaw가 MCP로 ReRoute를 사용 |
 
 ---
 
@@ -231,7 +232,40 @@ flowchart LR
 
 `AGENT_EXECUTION=remote`로 두면 에이전트는 샌드박스 안의 별도 프로세스가 됩니다. 에이전트가 장악되더라도 사람의 승인 없이는 예약을 바꿀 수 없습니다.
 
+## 8. 외부 에이전트 모드 (OpenClaw → MCP)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Op as 운영자
+    participant OC as OpenClaw<br/>(NemoClaw 샌드박스)
+    participant P as OpenShell 프록시
+    participant MCP as ReRoute /mcp
+    participant O as 오케스트레이터
+    participant D as 대시보드
+
+    Op->>OC: "KE123 결항, 재배정안 만들어줘"
+    OC->>P: tools/call open_recovery_task
+    P->>P: protocol: mcp 정책 검사 · Bearer 토큰 주입
+    P->>MCP: 요청 전달
+    MCP->>O: 외부 계획자 세션 생성
+    O-->>D: "외부 에이전트가 시작한 작업" 표시
+    loop OpenClaw가 계획
+        OC->>MCP: get_disrupted_flight / search_rebooking_policy / optimize_rebooking …
+        MCP->>O: 같은 검증 · 사전 조건 · 상태 머신
+        O-->>MCP: 결과 또는 오류 + next_step_hint
+        MCP-->>OC: 관찰
+    end
+    OC->>MCP: propose_rebooking
+    O-->>D: 승인 대기 (PENDING)
+    Note over OC,MCP: 승인·실행 도구는 MCP에 없음
+    Op->>D: 승인
+    D->>O: 실행 → 승인 게이트웨이 토큰 → Booking API
+```
+
+외부 에이전트가 두뇌가 되어도 ReRoute의 규칙은 그대로입니다. 규정 확보 없이 최적화할 수 없고, 사실 없이 "조치 불필요"로 끝낼 수 없으며, 승인은 사람만 합니다.
+
 ---
 
 관련 코드: `apps/api/app/agent/orchestrator.py` (루프·가드레일) · `app/agent/prompts.py` (규칙) · `app/tools/` (도구 8종) ·
-`app/providers/llm/` (Nemotron 어댑터·선택 로직) · `app/agent/worker.py` (샌드박스 worker) · `app/agent/evaluate.py` (실제 모델 평가)
+`app/providers/llm/` (Nemotron 어댑터·선택 로직) · `app/agent/worker.py` (샌드박스 worker) · `app/agent/evaluate.py` (실제 모델 평가) · `app/integrations/mcp_server.py` (MCP 서버)

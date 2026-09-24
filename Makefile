@@ -6,7 +6,7 @@ AWS_REGION ?= ap-northeast-2
 TAG ?= latest
 TF := infra/terraform
 
-.PHONY: eval-llm help up up-gpu up-worker down logs reset smoke test lint fmt dev-api dev-web install export-cuopt push redeploy tf-validate sandbox probes
+.PHONY: mcp-smoke eval-llm help up up-gpu up-worker down logs reset smoke test lint fmt dev-api dev-web install export-cuopt push redeploy tf-validate sandbox probes
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[32m%-14s\033[0m %s\n", $$1, $$2}'
@@ -55,6 +55,9 @@ dev-web: ## Run web locally (proxies /api to :8000)
 
 eval-llm: ## Score the agent on 4 scenarios with the configured LLM (set NVIDIA_API_KEY for Nemotron)
 	cd $(API) && .venv/bin/python -m app.agent.evaluate
+
+mcp-smoke: ## Exercise an MCP endpoint like an external agent: REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://host/mcp
+	cd $(API) && .venv/bin/python -m app.integrations.mcp_smoke $(or $(MCP_URL),http://localhost:8000/mcp)
 
 export-cuopt: ## Regenerate nvidia/cuopt/ke123-milp.json
 	cd $(API) && .venv/bin/python -m app.optimization.export_payload > ../../nvidia/cuopt/ke123-milp.json

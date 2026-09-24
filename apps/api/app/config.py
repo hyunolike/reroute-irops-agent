@@ -21,7 +21,7 @@ _DEFAULT_ROOT = _default_root()
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore", populate_by_name=True)
 
     app_name: str = "ReRoute"
     project_root: Path = Field(default=_DEFAULT_ROOT)
@@ -89,6 +89,12 @@ class Settings(BaseSettings):
 
     documents_dir: Path | None = None
     seed_dir: Path | None = None
+    # --- MCP server for external agents (OpenClaw in NemoClaw). Disabled unless a bearer token is set.
+    mcp_bearer_token: SecretStr | None = Field(default=None, validation_alias="REROUTE_MCP_TOKEN")
+    # Host headers accepted on /mcp (DNS-rebinding protection); add your public hostname, e.g. "reroute.example.com"
+    mcp_allowed_hosts: str = "localhost:*,127.0.0.1:*,reroute-api:*,testserver,test"
+    public_url: str = "http://localhost:3000"
+
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     allow_demo_reset: bool = True
 

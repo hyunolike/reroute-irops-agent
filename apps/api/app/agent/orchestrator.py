@@ -58,6 +58,7 @@ class AgentOrchestrator:
         self.component_overrides = component_overrides or {}
         self.step_delay_ms = step_delay_ms
         self.max_steps = max_steps
+        self._external: dict[str, ToolContext] = {}
         self._state: dict[str, str] = {}
 
     # ------------------------------------------------------------------ helpers
@@ -149,19 +150,77 @@ class AgentOrchestrator:
                     break
             else:
                 raise RuntimeError(f"step budget of {self.max_steps} planner turns exhausted before a plan was proposed")
-            self._set_state(task_id, AgentState.WAITING_APPROVAL, "Waiting for operator approval")
-            self.repo.update_task(task_id, plan_id=memory.plan_id, flight_no=memory.flight.flight_no if memory.flight else None)
-            self._emit(
-                task_id,
-                EventType.APPROVAL,
-                Component.APPROVAL_GATEWAY,
-                "Approval requested - booking changes are blocked until an operator approves",
-                {"plan_id": memory.plan_id, "approval_id": memory.approval_id},
-            )
+            self._await_approval(task_id, memory)
         except Exception as e:  # noqa: BLE001 - any failure must be visible, never silent
             log.exception("agent task %s failed", task_id)
             self._set_state(task_id, AgentState.FAILED, f"Failed: {e}")
             self.repo.update_task(task_id, error=str(e))
+
+    def _await_approval(self, task_id: str, memory: AgentMemory) -> None:
+        self._set_state(task_id, AgentState.WAITING_APPROVAL, "Waiting for operator approval")
+        self.repo.update_task(task_id, plan_id=memory.plan_id, flight_no=memory.flight.flight_no if memory.flight else None)
+        self._emit(
+            task_id,
+            EventType.APPROVAL,
+            Component.APPROVAL_GATEWAY,
+            "Approval requested - booking changes are blocked until an operator approves",
+            {"plan_id": memory.plan_id, "approval_id": memory.approval_id},
+        )
+
+    # ------------------------------------------------------------------ external planner (MCP)
+    # An external agent (e.g. OpenClaw inside NemoClaw) is the planner; ReRoute executes its tool calls with the
+    # SAME validation, preconditions, state machine, event log and approval boundary as its own agent.
+    def open_external_task(self, command: str, client: str, runtime: dict[str, Any]) -> str:
+        task = self.repo.create_task(command, runtime={**runtime, "planner": "external", "planner_client": client})
+        memory = AgentMemory()
+        ctx = ToolContext(task_id=task.id, agent=self.agent, memory=memory, http=self.http, gateway=self.gateway)
+        llm_ref: dict[str, LLMProvider] = {"llm": self.llm}
+        ctx.write_briefing = lambda: self._write_briefing(task.id, memory, llm_ref)
+        self._external[task.id] = ctx
+        self._state[task.id] = ""
+        self._set_state(task.id, AgentState.RECEIVED, f"Goal received from external agent ({client}): “{command}”")
+        return task.id
+
+    def _external_ctx(self, task_id: str) -> ToolContext:
+        ctx = self._external.get(task_id)
+        if ctx is None:
+            raise KeyError(f"no open external session for task {task_id} (open_recovery_task first)")
+        if self._state.get(task_id) in {
+            s.value for s in (AgentState.WAITING_APPROVAL, AgentState.COMPLETED, AgentState.REJECTED, AgentState.FAILED)
+        }:
+            raise PermissionError(f"task {task_id} is {self._state[task_id]} - no further planning tools allowed")
+        return ctx
+
+    def external_note(self, task_id: str, client: str, note: str) -> None:
+        self._external_ctx(task_id)
+        self._emit(task_id, EventType.PLANNER, Component.EXTERNAL_AGENT, _one_line(note), {"client": client})
+
+    async def external_call(self, task_id: str, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
+        ctx = self._external_ctx(task_id)
+        tool = self.tools.get(tool_name)
+        if tool is None or tool.requires_approval:
+            # state-changing tools are never exposed to external planners - humans approve in the console
+            self._emit(task_id, EventType.GUARDRAIL, Component.ORCHESTRATOR, f"External agent may not call '{tool_name}'")
+            return {"error": f"tool {tool_name} is not available to external agents"}
+        call = ToolCall(id=f"mcp_{len(ctx.memory.policy_queries)}_{tool_name}", name=tool_name, arguments=args)
+        result = json.loads(await self._execute(task_id, call, ctx))
+        if ctx.memory.plan_id and tool_name == "propose_rebooking" and "error" not in result:
+            self._await_approval(task_id, ctx.memory)
+            self._external.pop(task_id, None)
+            result["next"] = "A human operator must approve the plan in the ReRoute console. You cannot approve it."
+        elif "error" in result:
+            result["next_step_hint"] = next_step_hint(ctx.memory)
+        return result
+
+    def external_finish_without_action(self, task_id: str, reason: str) -> dict[str, Any]:
+        ctx = self._external_ctx(task_id)
+        if not no_action_justified(ctx.memory):
+            hint = next_step_hint(ctx.memory)
+            self._emit(task_id, EventType.GUARDRAIL, Component.ORCHESTRATOR, f"External agent tried to stop early - next: {hint}")
+            return {"error": "the facts do not justify stopping without action", "next_step_hint": hint}
+        self._complete_without_action(task_id, ctx.memory, reason)
+        self._external.pop(task_id, None)
+        return {"state": "COMPLETED", "outcome": "NO_ACTION_REQUIRED"}
 
     async def _plan(self, task_id, llm_ref, messages, schemas) -> LLMResponse:
         llm = llm_ref["llm"]

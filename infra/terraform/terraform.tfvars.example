@@ -10,6 +10,10 @@ nim_model          = "nvidia/nemotron-3-super-120b-a12b"
 
 image_tag = "latest"
 
+# HTTPS + DNS name - required for the MCP endpoint used by NemoClaw (OpenClaw)
+# public_hostname = "reroute.example.com"
+# enable_mcp      = true
+
 # Optional HTTPS
 # certificate_arn = "arn:aws:acm:ap-northeast-2:123456789012:certificate/..."
 

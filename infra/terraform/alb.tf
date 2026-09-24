@@ -115,7 +115,7 @@ resource "aws_lb_listener_rule" "api" {
   }
   condition {
     path_pattern {
-      values = ["/api/*", "/docs", "/openapi.json"]
+      values = var.enable_mcp ? ["/api/*", "/docs", "/openapi.json", "/mcp"] : ["/api/*", "/docs", "/openapi.json"]
     }
   }
 }

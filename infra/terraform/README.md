@@ -97,7 +97,8 @@ IAM 인스턴스 역할이 할 수 있는 일: SSM 접속, ECR 이미지 읽기,
 | 4 | **NVIDIA 키를 서버 생성 전에 등록** — 서버는 처음 부팅할 때만 키를 읽습니다 | 아래 배포 절차 3단계 |
 | 5 | **로컬 도구** | Terraform ≥ 1.6, AWS CLI v2, Docker (Apple Silicon이면 buildx), `make` |
 | 6 | **Terraform 상태 저장소** — 기본은 로컬 파일 | 팀으로 쓸 거면 `versions.tf`의 S3 backend 주석 해제 |
-| 7 | **비용** — GPU 인스턴스·NAT·ALB·RDS가 켜져 있는 동안 계속 과금 | 시연이 끝나면 `terraform destroy`. 금액은 리전 요금표로 확인 |
+| 7 | **MCP(OpenClaw 연동)용 HTTPS 도메인** — NemoClaw는 HTTPS MCP 엔드포인트만 받습니다 | `public_hostname`과 `certificate_arn` 설정 → `terraform output mcp_url`, 토큰은 `terraform output -raw mcp_token_command` 실행 |
+| 8 | **비용** — GPU 인스턴스·NAT·ALB·RDS가 켜져 있는 동안 계속 과금 | 시연이 끝나면 `terraform destroy`. 금액은 리전 요금표로 확인 |
 
 ## 5. 배포 절차
 

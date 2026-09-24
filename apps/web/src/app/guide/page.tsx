@@ -53,10 +53,10 @@ export default function Guide() {
       live: <Live on={rt ? rt.security.runtime === "openshell" : undefined} yes="enforced by OpenShell" no="policy mirror (same YAML, in-process)" />,
     },
     {
-      tech: "NemoClaw",
-      role: "OpenShell 위에서 Agent lifecycle(onboard/connect/policy/skill) 관리. ReRoute 스킬·정책 프리셋 제공.",
-      where: "nvidia/nemoclaw/ · nvidia/skills/reroute-irops/SKILL.md",
-      live: <span className="text-ops-muted">deployment option (see docs/nvidia-integration.md)</span>,
+      tech: "NemoClaw · OpenClaw",
+      role: "NemoClaw 샌드박스 안의 OpenClaw가 MCP(/mcp)로 ReRoute 도구를 사용. 같은 가드레일·감사 로그, 승인·실행 도구는 없음(사람만 승인).",
+      where: "apps/api/app/integrations/mcp_server.py · nvidia/nemoclaw/ · nvidia/skills/reroute-irops/SKILL.md",
+      live: <span className="text-ops-muted">MCP server tested · NemoClaw connection: see nvidia/nemoclaw/README.md</span>,
     },
     {
       tech: "NVIDIA Skills",

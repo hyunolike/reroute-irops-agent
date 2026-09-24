@@ -93,3 +93,4 @@ class Component(StrEnum):
     APPROVAL_GATEWAY = "approval-gateway"
     OPENSHELL = "openshell"
     POLICY_MIRROR = "policy-mirror"
+    EXTERNAL_AGENT = "external-agent"  # e.g. OpenClaw in NemoClaw, driving ReRoute tools over MCP
