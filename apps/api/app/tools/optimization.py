@@ -6,18 +6,8 @@ from pydantic import BaseModel, Field
 
 from app.domain.enums import AgentState, AssignmentStatus, Component
 from app.domain.models import OptimizationRequest, OptimizationResult
-from app.rag.compiler import compile_policy_rules
+from app.rag.compiler import SUGGESTED_QUERIES, compile_policy_rules
 from app.tools.base import Tool, ToolContext, ToolError, ToolResult
-
-_SUGGESTED = {
-    "own_carrier_first": "airline fault cancellation re-protection own carrier",
-    "interline": "interline partner carrier agreement",
-    "max_delay": "maximum re-accommodation window",
-    "mct": "minimum connection time at the destination airport",
-    "connection_risk": "at-risk connection margin",
-    "ssr": "special assistance passengers wheelchair unaccompanied minor",
-    "coterminal": "co-terminal airports",
-}
 
 
 class OptimizeArgs(BaseModel):
@@ -51,7 +41,7 @@ class OptimizeRebooking(Tool):
             return f"missing inputs - call {', '.join(missing)} first"
         rules = compile_policy_rules(list(m.policy_hits.values()))
         if rules.missing:
-            hints = "; ".join(f"{r}: '{_SUGGESTED.get(r, r)}'" for r in rules.missing)
+            hints = "; ".join(f"{r}: '{SUGGESTED_QUERIES.get(r, r)}'" for r in rules.missing)
             return f"policy coverage incomplete - retrieve policies for: {hints}"
         return None
 

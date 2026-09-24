@@ -46,9 +46,12 @@ services:
       AGENT_EXECUTION: ${AGENT_EXECUTION:-inline}
       AGENT_WORKER_TOKEN: ${AGENT_WORKER_TOKEN:-}
       AGENT_STEP_DELAY_MS: ${AGENT_STEP_DELAY_MS:-350}
-      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
       NIM_MODEL: ${NIM_MODEL:-nvidia/nemotron-3-super-120b-a12b}
+      REROUTE_MCP_TOKEN: ${REROUTE_MCP_TOKEN:-}
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-localhost:*,127.0.0.1:*,reroute-api:*}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
       RETRIEVER_PROVIDER: ${RETRIEVER_PROVIDER:-lexical}
       OPTIMIZATION_PROVIDER: ${OPTIMIZATION_PROVIDER:-fallback}
       CUOPT_BASE_URL: ${CUOPT_BASE_URL:-http://cuopt:5000}
@@ -93,7 +96,7 @@ services:
       REROUTE_API_BASE_URL: http://reroute-api:8000
       AGENT_WORKER_TOKEN: ${AGENT_WORKER_TOKEN:-}
       AGENT_STEP_DELAY_MS: ${AGENT_STEP_DELAY_MS:-350}
-      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
       NIM_MODEL: ${NIM_MODEL:-nvidia/nemotron-3-super-120b-a12b}
       SECURITY_RUNTIME: ${SECURITY_RUNTIME:-policy-mirror}

@@ -97,7 +97,8 @@ The instance role may only: use SSM, read ECR, read **this deployment's two secr
 | 4 | **Register the NVIDIA key before the host is created** — the host reads it only at first boot | step 3 of the procedure below |
 | 5 | **Local tools** | Terraform ≥ 1.6, AWS CLI v2, Docker (buildx on Apple Silicon), `make` |
 | 6 | **Terraform state** — local file by default | for a team, uncomment the S3 backend in `versions.tf` |
-| 7 | **Cost** — GPU instance, NAT, ALB and RDS bill while running | `terraform destroy` after the demo; check your region's price list |
+| 7 | **HTTPS hostname for MCP (OpenClaw integration)** — NemoClaw only accepts HTTPS MCP endpoints | set `public_hostname` and `certificate_arn` → `terraform output mcp_url`; token via `terraform output -raw mcp_token_command` |
+| 8 | **Cost** — GPU instance, NAT, ALB and RDS bill while running | `terraform destroy` after the demo; check your region's price list |
 
 ## 5. Deployment procedure
 

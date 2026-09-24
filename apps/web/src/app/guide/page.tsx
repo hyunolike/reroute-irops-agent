@@ -32,7 +32,7 @@ export default function Guide() {
       tech: "Nemotron · NIM",
       role: "목표 해석, 다음 Tool 선택(function calling), 예외 승객 설명 작성. 배정 결정은 하지 않음.",
       where: "apps/api/app/providers/llm/nim.py · agent/orchestrator.py",
-      live: <Live on={rt?.llm.nvidia} yes={`live · ${rt?.llm.model}`} no="mock planner (LLM_PROVIDER=mock)" />,
+      live: <Live on={rt?.llm.nvidia} yes={`live · ${rt?.llm.model}`} no={rt?.llm.reason ?? "scripted planner"} />,
     },
     {
       tech: "NeMo Retriever (RAG)",
@@ -53,10 +53,10 @@ export default function Guide() {
       live: <Live on={rt ? rt.security.runtime === "openshell" : undefined} yes="enforced by OpenShell" no="policy mirror (same YAML, in-process)" />,
     },
     {
-      tech: "NemoClaw",
-      role: "OpenShell 위에서 Agent lifecycle(onboard/connect/policy/skill) 관리. ReRoute 스킬·정책 프리셋 제공.",
-      where: "nvidia/nemoclaw/ · nvidia/skills/reroute-irops/SKILL.md",
-      live: <span className="text-ops-muted">deployment option (see docs/nvidia-integration.md)</span>,
+      tech: "NemoClaw · OpenClaw",
+      role: "NemoClaw 샌드박스 안의 OpenClaw가 MCP(/mcp)로 ReRoute 도구를 사용. 같은 가드레일·감사 로그, 승인·실행 도구는 없음(사람만 승인).",
+      where: "apps/api/app/integrations/mcp_server.py · nvidia/nemoclaw/ · nvidia/skills/reroute-irops/SKILL.md",
+      live: <span className="text-ops-muted">MCP server tested · NemoClaw connection: see nvidia/nemoclaw/README.md</span>,
     },
     {
       tech: "NVIDIA Skills",
@@ -196,7 +196,7 @@ min Σ delay·tier + VIP delay + downgrade
             </thead>
             <tbody className="text-slate-300">
               {[
-                ["Reasoning", "LLM_PROVIDER=nvidia → Nemotron via NIM tool calling", "LLM_PROVIDER=mock → deterministic scripted planner (same tools, same guardrails)"],
+                ["Reasoning", "LLM_PROVIDER=auto + NVIDIA_API_KEY → Nemotron via NIM chooses every tool", "no key (or LLM_PROVIDER=mock) → scripted planner (same tools, same guardrails, warning banner)"],
                 ["Retrieval", "RETRIEVER_PROVIDER=nvidia → llama-nemotron-embed-1b-v2 + rerank-1b-v2", "RETRIEVER_PROVIDER=lexical → BM25 over the same documents"],
                 ["Optimization", "OPTIMIZATION_PROVIDER=cuopt → cuOpt server (GPU)", "OPTIMIZATION_PROVIDER=fallback → HiGHS (CPU), same MILP"],
                 ["Sandbox", "SECURITY_RUNTIME=openshell → agent inside OpenShell", "SECURITY_RUNTIME=policy-mirror → same policy YAML evaluated in-process"],

@@ -30,7 +30,8 @@ class GetDisruptedFlight(Tool):
             "GET", f"/api/flights/{args.flight_no.upper()}", service="airline-service", tool=self.name, task_id=ctx.task_id
         )
         if r.status_code == 404:
-            raise ToolError(f"flight {args.flight_no} not found")
+            ctx.memory.flight_lookup_failed = True
+            raise ToolError(f"flight {args.flight_no} not found in the operations system")
         r.raise_for_status()
         f = FlightDTO.model_validate(r.json())
         ctx.memory.flight = f

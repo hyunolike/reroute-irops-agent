@@ -29,6 +29,9 @@ locals {
     retriever_provider = var.retriever_provider
     nim_model          = var.nim_model
     optimization       = var.enable_gpu ? "cuopt" : "fallback"
+    enable_mcp         = var.enable_mcp
+    mcp_allowed_hosts  = join(",", compact([var.public_hostname, aws_lb.main.dns_name, "reroute-api:*", "localhost:*"]))
+    public_url         = var.public_hostname != "" ? "https://${var.public_hostname}" : "http://${aws_lb.main.dns_name}"
   })
 }
 

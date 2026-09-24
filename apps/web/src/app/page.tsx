@@ -19,7 +19,7 @@ import { WelcomeBoard } from "@/components/WelcomeBoard";
 import { Empty } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAgentTask } from "@/lib/useAgentTask";
-import type { Runtime } from "@/lib/types";
+import type { Runtime, Task } from "@/lib/types";
 
 const RUNNING = new Set(["RECEIVED", "ANALYZING_DISRUPTION", "FETCHING_PASSENGERS", "SEARCHING_ALTERNATIVES", "RETRIEVING_POLICIES", "OPTIMIZING", "GENERATING_PROPOSAL", "EXECUTING"]);
 
@@ -29,7 +29,23 @@ export default function Dashboard() {
   const [hoverPolicy, setHoverPolicy] = useState<string | null>(null);
   const [selectedManual, setSelectedManual] = useState<string[]>([]);
   const [auditKey, setAuditKey] = useState(0);
-  const { task, events, plan, error, transport, run, follow, clear, setPlan } = useAgentTask();
+  const { task, events, plan, error, transport, run, follow, attach, clear, setPlan } = useAgentTask();
+  const [external, setExternal] = useState<Task | null>(null);
+
+  // Tasks started by external agents (OpenClaw via MCP) or delegated to ReRoute show up here to follow live.
+  useEffect(() => {
+    const poll = () =>
+      api
+        .tasks()
+        .then(({ tasks }) => {
+          const ext = tasks.find((t) => (t.runtime?.planner === "external" || t.runtime?.delegated_by) && t.id !== task?.id);
+          setExternal(ext && Date.now() - new Date(ext.created_at).getTime() < 30 * 60 * 1000 ? ext : null);
+        })
+        .catch(() => {});
+    poll();
+    const t = setInterval(poll, 3000);
+    return () => clearInterval(t);
+  }, [task?.id]);
 
   useEffect(() => {
     api.runtime().then(setRuntime).catch(() => setRuntime(null));
@@ -62,6 +78,31 @@ export default function Dashboard() {
     <div className="min-h-screen">
       <TopBar runtime={runtime} onReset={onReset} resetting={resetting} />
       <main className="mx-auto max-w-[1600px] space-y-4 px-5 py-5">
+        {runtime && !runtime.llm.nvidia && task?.runtime?.planner !== "external" && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs text-amber-100">
+            <b className="text-amber-300">스크립트 플래너로 실행 중</b>
+            <span>— 에이전트 틀·도구·가드레일은 동일하지만, 다음 도구 선택은 Nemotron이 아닌 정해진 순서로 이뤄집니다.</span>
+            <span className="text-amber-200/80">{runtime.llm.reason}</span>
+          </div>
+        )}
+        {external && (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-fuchsia-500/40 bg-fuchsia-500/10 px-4 py-2 text-sm">
+            <span className="rounded bg-fuchsia-500/20 px-2 py-0.5 text-[11px] font-semibold text-fuchsia-200">
+              {external.runtime?.planner_client ?? external.runtime?.delegated_by ?? "external agent"}
+            </span>
+            <span className="text-fuchsia-100">외부 에이전트가 시작한 작업: “{external.command}”</span>
+            <span className="font-mono text-[11px] text-fuchsia-200/70">{external.state}</span>
+            <button
+              onClick={() => {
+                setSelectedManual([]);
+                void attach(external.id);
+              }}
+              className="ml-auto rounded-md bg-fuchsia-500 px-3 py-1 text-xs font-bold text-black hover:bg-fuchsia-400"
+            >
+              실시간으로 보기
+            </button>
+          </div>
+        )}
         <DemoStepper state={task?.state} />
         <CommandPanel onRun={onRun} busy={busy} />
         {error && <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-2 text-sm text-rose-200">API error: {error}</div>}
@@ -73,6 +114,8 @@ export default function Dashboard() {
             {task && (
               <div className="text-right font-mono text-[10px] text-ops-muted">
                 task {task.id} · stream: {transport ?? "—"}
+                {task.runtime?.planner === "external" && <span className="text-fuchsia-300"> · planner: {task.runtime.planner_client}</span>}
+                {task.runtime?.delegated_by && <span className="text-fuchsia-300"> · delegated by {task.runtime.delegated_by}</span>}
                 {task.runtime?.planner_fallback && <span className="text-amber-300"> · planner fallback active</span>}
               </div>
             )}

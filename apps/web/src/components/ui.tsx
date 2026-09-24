@@ -50,6 +50,7 @@ const COMPONENT_STYLE: Record<Component, { label: string; cls: string; nvidia?: 
   "airline-api": { label: "Airline API", cls: "bg-slate-500/10 text-slate-300 ring-slate-500/30" },
   "approval-gateway": { label: "Approval Gateway", cls: "bg-violet-500/10 text-violet-300 ring-violet-500/30" },
   orchestrator: { label: "Orchestrator", cls: "bg-slate-500/10 text-slate-400 ring-slate-500/20" },
+  "external-agent": { label: "External agent · MCP", cls: "bg-fuchsia-500/10 text-fuchsia-300 ring-fuchsia-500/30" },
 };
 
 export function ComponentBadge({ c, className }: { c: Component; className?: string }) {

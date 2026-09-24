@@ -114,6 +114,21 @@ export function useAgentTask() {
     subscribe(id);
   }, [refreshTask, subscribe]);
 
+  /** Follow an existing task (e.g. one started by an external agent over MCP) from its first event. */
+  const attach = useCallback(
+    async (id: string) => {
+      stop();
+      setError(null);
+      setEvents([]);
+      setPlan(null);
+      lastSeq.current = 0;
+      taskIdRef.current = id;
+      await refreshTask(id);
+      subscribe(id);
+    },
+    [refreshTask, stop, subscribe],
+  );
+
   const clear = useCallback(() => {
     stop();
     taskIdRef.current = null;
@@ -126,5 +141,5 @@ export function useAgentTask() {
 
   useEffect(() => stop, [stop]);
 
-  return { task, events, plan, error, transport, run, follow, clear, setPlan };
+  return { task, events, plan, error, transport, run, follow, attach, clear, setPlan };
 }

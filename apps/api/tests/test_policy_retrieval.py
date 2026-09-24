@@ -53,6 +53,6 @@ def test_compiler_applies_only_retrieved_policies():
     assert full.applied["mct"] == "MCT-002"
 
     partial = compile_policy_rules([h for h in hits if h.policy_id in {"IROP-001", "VIP-001"}])
-    assert set(partial.missing) == set(REQUIRED_RULES) - {"own_carrier_first"}
+    assert set(partial.missing) == set(REQUIRED_RULES) - {"own_carrier_first", "vip_priority"}
     assert partial.allow_interline is False  # conservative default, not LLM memory
     assert partial.mct_minutes == 120

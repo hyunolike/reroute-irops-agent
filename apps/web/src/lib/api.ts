@@ -24,6 +24,7 @@ export const api = {
   runtime: () => req<Runtime>("/api/system/runtime"),
   createTask: (command: string) => req<Task>("/api/agent/tasks", { method: "POST", body: JSON.stringify({ command }) }),
   task: (id: string) => req<Task>(`/api/agent/tasks/${id}`),
+  tasks: () => req<{ tasks: Task[] }>("/api/agent/tasks"),
   events: (id: string, after = 0) => req<{ events: AgentEvent[] }>(`/api/agent/tasks/${id}/events?stream=false&after=${after}`),
   plan: (id: string) => req<Plan>(`/api/rebooking/plans/${id}`),
   flight: (no: string) => req<Flight>(`/api/flights/${no}`),

@@ -83,10 +83,10 @@ class MockLLMProvider(LLMProvider):
                 return LLMResponse(
                     content=f"{flight['flight_no']} is delayed {flight.get('delay_minutes')} min. "
                     "Checking the rebooking threshold policy before deciding.",
-                    tool_calls=[call("search_rebooking_policy", query="rebooking threshold for delayed flights")],
+                    tool_calls=[call("search_rebooking_policy", queries=["rebooking threshold for delayed flights"])],
                     model=self.model,
                 )
-            hits = self._last_json(called["search_rebooking_policy"]).get("hits", [])
+            hits = [h for r in self._last_json(called["search_rebooking_policy"]).get("results", []) for h in r["hits"]]
             threshold = next(
                 (
                     h["params"]["rebooking_threshold_delay_minutes"]
@@ -127,16 +127,32 @@ class MockLLMProvider(LLMProvider):
                 ],
                 model=self.model,
             )
-        if "search_rebooking_policy" not in called:
+        searches = called.get("search_rebooking_policy", [])
+        coverage = self._last_json(searches).get("coverage", {}) if searches else {}
+        if not searches or flight.get("requires_recovery") is None and not coverage.get("grounded", {}).get("mct"):
+            batches = [POLICY_QUERIES[i : i + 6] for i in range(0, len(POLICY_QUERIES), 6)]
             return LLMResponse(
                 content="Retrieving the governing airline policies before any allocation decision.",
-                tool_calls=[call("search_rebooking_policy", query=q) for q in POLICY_QUERIES],
+                tool_calls=[call("search_rebooking_policy", queries=b) for b in batches],
+                model=self.model,
+            )
+        if coverage.get("missing") and "optimize_rebooking" not in called:
+            return LLMResponse(
+                content=f"Policy coverage still missing {coverage['missing']} - searching again.",
+                tool_calls=[call("search_rebooking_policy", queries=coverage["suggested_queries"][:8])],
                 model=self.model,
             )
         if "optimize_rebooking" not in called:
             return LLMResponse(
                 content="Constraints are grounded in retrieved policies. Delegating the allocation to the solver.",
                 tool_calls=[call("optimize_rebooking", flight_no=flight["flight_no"])],
+                model=self.model,
+            )
+        exceptions = self._last_json(called["optimize_rebooking"]).get("exceptions", [])
+        if exceptions and "explore_exception_options" not in called:
+            return LLMResponse(
+                content=f"{len(exceptions)} passengers need attention. Analysing their options before proposing.",
+                tool_calls=[call("explore_exception_options", passenger_id=e["passenger_id"]) for e in exceptions],
                 model=self.model,
             )
         if "propose_rebooking" not in called:

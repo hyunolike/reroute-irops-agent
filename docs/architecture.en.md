@@ -14,6 +14,8 @@ components with explicit interfaces. Each one closes a different failure mode of
 | Unauthorised state change | Approval Gateway + signed, single-use, item-bound token verified by the Booking API |
 | Invisible behaviour | Every state change, tool call, policy decision, approval and booking write is in the event log / audit log |
 
+The agent's internal structure and behaviour are in [agent.en.md](agent.en.md).
+
 Diagrams: [1. System](#1-system-architecture) · [2. Agent state machine](#2-agent-workflow-state-machine) ·
 [3. Sequence](#3-sequence-ke123-cancellation) · [4. Security boundaries](#4-security-boundaries) ·
 [5. Approval flow](#5-human-approval-flow) · [6. Optimization flow](#6-optimization-flow) · [7. AWS deployment](#7-aws-deployment)

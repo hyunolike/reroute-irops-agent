@@ -22,12 +22,13 @@ from app.approval.gateway import ApprovalError, ApprovalGateway
 from app.domain.enums import AgentState, AssignmentStatus, Component, EventType
 from app.providers.llm.base import LLMError, LLMProvider, LLMResponse, ToolCall
 from app.providers.llm.mock import MockLLMProvider
+from app.rag.compiler import SUGGESTED_QUERIES, compile_policy_rules
 from app.repositories.agent import AgentRepository
 from app.security.governed_http import GovernedHttpClient, PolicyViolation
 from app.tools.base import AgentMemory, ToolContext, ToolError, ToolRegistry
 
 log = logging.getLogger("reroute.agent")
-MAX_STEPS = 14
+MAX_NUDGES = 2
 _POLICY_ID = re.compile(r"\[([A-Z]{2,5}-\d{3})\]")
 
 
@@ -44,6 +45,7 @@ class AgentOrchestrator:
         security_component: Component,
         component_overrides: dict[str, Component] | None = None,
         step_delay_ms: int = 0,
+        max_steps: int = 30,
     ) -> None:
         self.repo = repo
         self.llm = llm
@@ -55,6 +57,8 @@ class AgentOrchestrator:
         # Badge each tool with the provider that is ACTUALLY configured (never claim NVIDIA when on fallback)
         self.component_overrides = component_overrides or {}
         self.step_delay_ms = step_delay_ms
+        self.max_steps = max_steps
+        self._external: dict[str, ToolContext] = {}
         self._state: dict[str, str] = {}
 
     # ------------------------------------------------------------------ helpers
@@ -64,7 +68,13 @@ class AgentOrchestrator:
     def _emit(self, task_id: str, type: EventType, component: Component, title: str, detail=None, duration_ms=None):
         state = self._state.get(task_id, AgentState.RECEIVED.value)
         self.repo.add_event(
-            task_id, type=type.value, state=state, component=component.value, title=title, detail=detail, duration_ms=duration_ms
+            task_id,
+            type=type.value,
+            state=state,
+            component=component.value,
+            title=title,
+            detail=detail or {},
+            duration_ms=duration_ms,
         )
 
     def _set_state(self, task_id: str, state: AgentState, note: str | None = None) -> None:
@@ -89,9 +99,9 @@ class AgentOrchestrator:
             {"role": "user", "content": task.command},
         ]
         schemas = self.tools.schemas()
-        nudged = False
+        nudges = 0
         try:
-            for _ in range(MAX_STEPS):
+            for _ in range(self.max_steps):
                 resp = await self._plan(task_id, llm_ref, messages, schemas)
                 if resp.content:
                     self._emit(
@@ -109,20 +119,28 @@ class AgentOrchestrator:
                 if not resp.tool_calls:
                     if memory.plan_id:
                         break
-                    if memory.flight is not None and memory.flight_assessment in {"no_recovery", "check_policy"}:
+                    if no_action_justified(memory):
                         return self._complete_without_action(task_id, memory, resp.content or "")
-                    if memory.flight is None:
+                    if memory.flight is None and (nudges >= 1 or memory.flight_lookup_failed):
                         raise RuntimeError(resp.content or "could not identify or verify the disrupted flight")
-                    if nudged:
+                    hint = next_step_hint(memory)
+                    if nudges >= MAX_NUDGES:
                         self._emit(
                             task_id,
                             EventType.GUARDRAIL,
                             Component.ORCHESTRATOR,
-                            "Planner stopped early twice → switching to deterministic planner",
+                            f"Planner stopped {nudges + 1}× before proposing a plan → deterministic planner takes over",
                         )
                         llm_ref["llm"] = MockLLMProvider()
-                    nudged = True
-                    messages.append({"role": "user", "content": "Continue the workflow by calling the next required tool."})
+                    else:
+                        self._emit(task_id, EventType.GUARDRAIL, Component.ORCHESTRATOR, f"Workflow not finished - next: {hint}")
+                    nudges += 1
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": f"The workflow is not finished. Next required step: {hint}. Call the tool now.",
+                        }
+                    )
                     continue
                 messages.append(_assistant_message(resp))
                 for tc in resp.tool_calls:
@@ -131,20 +149,78 @@ class AgentOrchestrator:
                 if memory.plan_id:
                     break
             else:
-                raise RuntimeError(f"step budget of {MAX_STEPS} exhausted before a plan was proposed")
-            self._set_state(task_id, AgentState.WAITING_APPROVAL, "Waiting for operator approval")
-            self.repo.update_task(task_id, plan_id=memory.plan_id, flight_no=memory.flight.flight_no if memory.flight else None)
-            self._emit(
-                task_id,
-                EventType.APPROVAL,
-                Component.APPROVAL_GATEWAY,
-                "Approval requested - booking changes are blocked until an operator approves",
-                {"plan_id": memory.plan_id, "approval_id": memory.approval_id},
-            )
+                raise RuntimeError(f"step budget of {self.max_steps} planner turns exhausted before a plan was proposed")
+            self._await_approval(task_id, memory)
         except Exception as e:  # noqa: BLE001 - any failure must be visible, never silent
             log.exception("agent task %s failed", task_id)
             self._set_state(task_id, AgentState.FAILED, f"Failed: {e}")
             self.repo.update_task(task_id, error=str(e))
+
+    def _await_approval(self, task_id: str, memory: AgentMemory) -> None:
+        self._set_state(task_id, AgentState.WAITING_APPROVAL, "Waiting for operator approval")
+        self.repo.update_task(task_id, plan_id=memory.plan_id, flight_no=memory.flight.flight_no if memory.flight else None)
+        self._emit(
+            task_id,
+            EventType.APPROVAL,
+            Component.APPROVAL_GATEWAY,
+            "Approval requested - booking changes are blocked until an operator approves",
+            {"plan_id": memory.plan_id, "approval_id": memory.approval_id},
+        )
+
+    # ------------------------------------------------------------------ external planner (MCP)
+    # An external agent (e.g. OpenClaw inside NemoClaw) is the planner; ReRoute executes its tool calls with the
+    # SAME validation, preconditions, state machine, event log and approval boundary as its own agent.
+    def open_external_task(self, command: str, client: str, runtime: dict[str, Any]) -> str:
+        task = self.repo.create_task(command, runtime={**runtime, "planner": "external", "planner_client": client})
+        memory = AgentMemory()
+        ctx = ToolContext(task_id=task.id, agent=self.agent, memory=memory, http=self.http, gateway=self.gateway)
+        llm_ref: dict[str, LLMProvider] = {"llm": self.llm}
+        ctx.write_briefing = lambda: self._write_briefing(task.id, memory, llm_ref)
+        self._external[task.id] = ctx
+        self._state[task.id] = ""
+        self._set_state(task.id, AgentState.RECEIVED, f"Goal received from external agent ({client}): “{command}”")
+        return task.id
+
+    def _external_ctx(self, task_id: str) -> ToolContext:
+        ctx = self._external.get(task_id)
+        if ctx is None:
+            raise KeyError(f"no open external session for task {task_id} (open_recovery_task first)")
+        if self._state.get(task_id) in {
+            s.value for s in (AgentState.WAITING_APPROVAL, AgentState.COMPLETED, AgentState.REJECTED, AgentState.FAILED)
+        }:
+            raise PermissionError(f"task {task_id} is {self._state[task_id]} - no further planning tools allowed")
+        return ctx
+
+    def external_note(self, task_id: str, client: str, note: str) -> None:
+        self._external_ctx(task_id)
+        self._emit(task_id, EventType.PLANNER, Component.EXTERNAL_AGENT, _one_line(note), {"client": client})
+
+    async def external_call(self, task_id: str, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
+        ctx = self._external_ctx(task_id)
+        tool = self.tools.get(tool_name)
+        if tool is None or tool.requires_approval:
+            # state-changing tools are never exposed to external planners - humans approve in the console
+            self._emit(task_id, EventType.GUARDRAIL, Component.ORCHESTRATOR, f"External agent may not call '{tool_name}'")
+            return {"error": f"tool {tool_name} is not available to external agents"}
+        call = ToolCall(id=f"mcp_{len(ctx.memory.policy_queries)}_{tool_name}", name=tool_name, arguments=args)
+        result = json.loads(await self._execute(task_id, call, ctx))
+        if ctx.memory.plan_id and tool_name == "propose_rebooking" and "error" not in result:
+            self._await_approval(task_id, ctx.memory)
+            self._external.pop(task_id, None)
+            result["next"] = "A human operator must approve the plan in the ReRoute console. You cannot approve it."
+        elif "error" in result:
+            result["next_step_hint"] = next_step_hint(ctx.memory)
+        return result
+
+    def external_finish_without_action(self, task_id: str, reason: str) -> dict[str, Any]:
+        ctx = self._external_ctx(task_id)
+        if not no_action_justified(ctx.memory):
+            hint = next_step_hint(ctx.memory)
+            self._emit(task_id, EventType.GUARDRAIL, Component.ORCHESTRATOR, f"External agent tried to stop early - next: {hint}")
+            return {"error": "the facts do not justify stopping without action", "next_step_hint": hint}
+        self._complete_without_action(task_id, ctx.memory, reason)
+        self._external.pop(task_id, None)
+        return {"state": "COMPLETED", "outcome": "NO_ACTION_REQUIRED"}
 
     async def _plan(self, task_id, llm_ref, messages, schemas) -> LLMResponse:
         llm = llm_ref["llm"]
@@ -254,6 +330,16 @@ class AgentOrchestrator:
                 if a.status != AssignmentStatus.AUTO_ASSIGNED
             ],
             "policies": {pid: h.title for pid, h in sorted(memory.policy_hits.items())},
+            "exception_analyses": {
+                pid: {
+                    "current_plan": a["current_plan"],
+                    "options": [
+                        {k: o[k] for k in ("flight_no", "arrival_delay_min", "connection_margin_min", "blocked_by")}
+                        for o in a["options"]
+                    ],
+                }
+                for pid, a in memory.exception_analyses.items()
+            },
         }
         llm = llm_ref["llm"]
         text = ""
@@ -389,6 +475,45 @@ class AgentOrchestrator:
 
 
 # ---------------------------------------------------------------------- utilities
+def no_action_justified(memory: AgentMemory) -> bool:
+    """The planner may stop without a plan only if the facts say no re-accommodation is needed."""
+    f = memory.flight
+    if f is None:
+        return False
+    if memory.flight_assessment == "no_recovery":
+        return True
+    if memory.flight_assessment == "check_policy":
+        threshold = compile_policy_rules(list(memory.policy_hits.values())).rebooking_threshold_delay_minutes
+        delay = f.disruption.delay_minutes if f.disruption else 0
+        return threshold is not None and delay < threshold
+    return False
+
+
+def next_step_hint(memory: AgentMemory) -> str:
+    """Concrete guidance when the model stops early - keeps the LLM in charge instead of replacing it."""
+    if memory.flight is None:
+        return "call get_disrupted_flight with the flight number from the instruction"
+    if (
+        memory.flight_assessment == "check_policy"
+        and compile_policy_rules(list(memory.policy_hits.values())).rebooking_threshold_delay_minutes is None
+    ):
+        return "call search_rebooking_policy with queries ['rebooking threshold for delayed flights'] and compare with the delay"
+    if not memory.passengers:
+        return f"call get_affected_passengers(flight_no={memory.flight.flight_no})"
+    if not memory.alternatives:
+        f = memory.flight
+        return (
+            f"call search_alternative_flights(origin={f.origin}, destination={f.destination}, "
+            f"departure_date={f.departure_time.date()})"
+        )
+    missing = compile_policy_rules(list(memory.policy_hits.values())).missing
+    if missing:
+        return "call search_rebooking_policy with queries " + str([SUGGESTED_QUERIES.get(m, m) for m in missing])
+    if memory.optimization is None:
+        return f"call optimize_rebooking(flight_no={memory.flight.flight_no})"
+    return f"call propose_rebooking(flight_no={memory.flight.flight_no}) to request operator approval"
+
+
 def _assistant_message(resp: LLMResponse) -> dict[str, Any]:
     return {
         "role": "assistant",

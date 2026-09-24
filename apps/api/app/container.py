@@ -20,8 +20,7 @@ from app.optimization.cuopt import CuOptOptimizationProvider
 from app.optimization.fallback import FallbackOptimizationProvider
 from app.optimization.service import RebookingOptimizer
 from app.providers.llm.base import LLMProvider
-from app.providers.llm.mock import MockLLMProvider
-from app.providers.llm.nim import NvidiaNimProvider
+from app.providers.llm.factory import build_llm
 from app.rag.documents import load_policy_chunks
 from app.rag.lexical import LexicalRetrieverProvider
 from app.rag.nvidia import NvidiaRetrieverProvider
@@ -32,6 +31,7 @@ from app.services.knowledge import PolicyKnowledgeService
 from app.services.optimization import OptimizationService
 from app.tools.airline import GetAffectedPassengers, GetDisruptedFlight, SearchAlternativeFlights
 from app.tools.base import ToolRegistry
+from app.tools.exceptions import ExploreExceptionOptions
 from app.tools.knowledge import SearchRebookingPolicy
 from app.tools.optimization import OptimizeRebooking
 from app.tools.rebooking import ExecuteRebooking, ProposeRebooking
@@ -114,21 +114,9 @@ class Container:
             primary = fallback
         self.optimization = OptimizationService(primary, fallback if settings.optimization_allow_fallback else None)
 
-        # --- reasoning model
+        # --- reasoning model: Nemotron via NIM (scripted planner only without a key, labelled)
         self.llm: LLMProvider
-        if settings.llm_provider == "nvidia" and key:
-            self.llm = NvidiaNimProvider(
-                self.http,
-                key,
-                settings.nim_base_url,
-                settings.nim_model,
-                temperature=settings.nim_temperature,
-                enable_thinking=settings.nim_enable_thinking,
-            )
-        else:
-            if settings.llm_provider == "nvidia":
-                log.warning("LLM_PROVIDER=nvidia but NVIDIA_API_KEY is not set - using mock planner")
-            self.llm = MockLLMProvider()
+        self.llm, self.llm_reason = build_llm(settings, self.http)
 
         self.tools = ToolRegistry(
             [
@@ -137,6 +125,7 @@ class Container:
                 SearchAlternativeFlights(),
                 SearchRebookingPolicy(),
                 OptimizeRebooking(),
+                ExploreExceptionOptions(),
                 ProposeRebooking(),
                 ExecuteRebooking(),
             ]
@@ -156,6 +145,7 @@ class Container:
                 "optimize_rebooking": Component.CUOPT if self.optimization.primary.provider.nvidia else Component.FALLBACK_SOLVER,
             },
             step_delay_ms=settings.agent_step_delay_ms,
+            max_steps=settings.agent_max_steps,
         )
 
     def runtime_info(self) -> dict[str, Any]:
@@ -163,7 +153,7 @@ class Container:
         return {
             "demo_mode": s.demo_mode,
             "app_role": s.app_role,
-            "llm": {"provider": self.llm.name, "model": self.llm.model, "nvidia": self.llm.nvidia},
+            "llm": {"provider": self.llm.name, "model": self.llm.model, "nvidia": self.llm.nvidia, "reason": self.llm_reason},
             "retriever": {
                 "provider": self.knowledge.primary.name,
                 "nvidia": self.knowledge.primary.nvidia,

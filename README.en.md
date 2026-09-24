@@ -21,7 +21,8 @@
 |---|---|
 | 🎬 Demo in one command | `docker compose up --build` → http://localhost:3000 → **Run Agent** |
 | 📖 3-minute judge guide | http://localhost:3000/guide · [docs/demo-scenario.md](docs/demo-scenario.md) |
-| 🧭 Architecture (7 Mermaid diagrams) | [docs/architecture.en.md](docs/architecture.en.md) · [한국어](docs/architecture.md) |
+| 🤖 Agent structure & behaviour (7 diagrams) | [docs/agent.en.md](docs/agent.en.md) · [한국어](docs/agent.md) |
+| 🧭 System architecture (7 Mermaid diagrams) | [docs/architecture.en.md](docs/architecture.en.md) · [한국어](docs/architecture.md) |
 | 🟩 NVIDIA integration & verification status | [docs/nvidia-integration.md](docs/nvidia-integration.md) · [nvidia/](nvidia/) |
 | ☁️ AWS deployment (Terraform) | [infra/terraform/README.en.md](infra/terraform/README.en.md) · [한국어](infra/terraform/README.md) |
 
@@ -29,7 +30,7 @@
 
 ## Contents
 1. [Problem](#problem) · 2. [Solution](#solution) · 3. [Why Agentic AI?](#why-agentic-ai) · 4. [Why NVIDIA?](#why-nvidia)
-5. [Architecture](#architecture) · 6. [NVIDIA stack & run modes](#nvidia-stack--run-modes) · 7. [Demo](#demo) · 8. [Getting started](#getting-started)
+5. [Architecture](#architecture) · [How the LLM agent works](#how-the-llm-agent-works) · [NemoClaw · OpenClaw](#nemoclaw--openclaw-integration-mcp) · 6. [NVIDIA stack & run modes](#nvidia-stack--run-modes) · 7. [Demo](#demo) · 8. [Getting started](#getting-started)
 9. [AWS deployment](#aws-deployment) · 10. [Security](#security) · 11. [Optimization](#optimization) · 12. [Screenshots](#screenshots) · 13. [Future work](#future-work)
 
 ---
@@ -95,7 +96,7 @@ Each technology closes a **different failure mode** of LLM agents.
 | **NeMo Retriever** (RAG) | Rebooking / fare / VIP / MCT / IROPS policy search with policy id · document · score provenance | Hallucinated rules |
 | **cuOpt** | Final allocation as a passenger × flight × cabin 0-1 MILP (source of truth) | Arbitrary LLM allocation, constraint violations |
 | **OpenShell** | Agent sandbox: egress / L7 rules, filesystem, process, credential isolation | Over-privilege, data exfiltration |
-| **NemoClaw** | Governed runtime for an operator copilot (policy preset + skill) | Ungoverned always-on agents |
+| **NemoClaw · OpenClaw** | OpenClaw uses ReRoute tools over MCP (NemoClaw manages the OpenShell policy and credential injection) | Ungoverned always-on agents |
 | **NVIDIA Skills** | Implemented following `cuopt-numerical-optimization-formulation`, `cuopt-server-api-python`, `nemo-retriever` | Guessed APIs |
 
 > NVIDIA APIs were not guessed. NIM, cuOpt, OpenShell, NemoClaw and Retriever interfaces were taken from the `docs/` sources
@@ -109,7 +110,7 @@ flowchart TB
     op([Operator]) --> web["Next.js Operations Dashboard"]
     web -- "REST + SSE (/api/*)" --> cp["ReRoute control plane (FastAPI)<br/>Agent API · Approval Gateway · Audit<br/>Knowledge service · Optimization service"]
     subgraph sandbox["NVIDIA OpenShell sandbox"]
-        agent["ReRoute Agent<br/>orchestrator + 7 typed tools"]
+        agent["ReRoute Agent<br/>orchestrator + 8 typed tools"]
     end
     cp <--> agent
     agent -- "tool calling" --> nim["Nemotron via NIM"]
@@ -125,17 +126,68 @@ flowchart TB
 - With `AGENT_EXECUTION=remote` the agent runs as a separate worker **with no DB credentials and no approval-signing key** — the process that runs inside an OpenShell sandbox.
 
 **Tools:** `get_disrupted_flight` · `get_affected_passengers` · `search_alternative_flights` · `search_rebooking_policy` ·
-`optimize_rebooking` · `propose_rebooking` · `execute_rebooking` *(approval required)*
+`optimize_rebooking` · `explore_exception_options` · `propose_rebooking` · `execute_rebooking` *(approval required)*
 
 **State machine:** `RECEIVED → ANALYZING_DISRUPTION → FETCHING_PASSENGERS → SEARCHING_ALTERNATIVES → RETRIEVING_POLICIES →
 OPTIMIZING → GENERATING_PROPOSAL → WAITING_APPROVAL → EXECUTING → COMPLETED` (+ `REJECTED`, `FAILED`). Every transition is
 persisted and streamed to the UI over SSE. Detailed diagrams: [docs/architecture.en.md](docs/architecture.en.md).
 
+## How the LLM agent works
+
+> As diagrams: [docs/agent.en.md](docs/agent.en.md) — structure, loop, one run, who decides what, recovery paths
+
+With the default `LLM_PROVIDER=auto` and an NVIDIA key, **Nemotron chooses the next tool at every step** — there is no fixed order.
+
+| Design element | Role |
+|---|---|
+| Plan first | The first reply is a 3–6 step plan; before each tool call the model writes a short rationale in the operator's language (shown in the timeline) |
+| Tool feedback | Policy search returns `coverage` (grounded rules / missing rules / suggested queries), so the model decides when to search more |
+| Exception reasoning | After optimization, `explore_exception_options` examines each exception passenger's options and blocking constraints; grounded actions go into the briefing |
+| Guardrails | Wrong order / arguments come back as errors for the model to fix; if it stops early it gets a **concrete next-step instruction** (up to 2×) |
+| Robustness | Text-form tool calls (`<TOOLCALL>` …) are parsed, `<think>` separated, 429/5xx retried. Only if it still cannot finish does the scripted planner take over — and that is logged |
+| Decision boundary | The model cannot change the allocation (the solver decides) and cannot change bookings without approval |
+
+Real-model evaluation: `NVIDIA_API_KEY=nvapi-... make eval-llm` runs 4 scenarios (cancellation KO/EN, delay, unknown flight) on Nemotron and
+scores final state, tools used, guidance interventions, fallback, and solver result.
+
+> Status: no run against real Nemotron yet (this dev environment has no key and its network blocks the NVIDIA endpoint). Tests with
+> fake models that behave imperfectly (one tool per turn, wrong order, wrong argument shape, stopping early) verify the agent still completes.
+
+## NemoClaw · OpenClaw integration (MCP)
+
+ReRoute exposes its tools as an **MCP server** (`/mcp`) so that **OpenClaw running inside an NVIDIA NemoClaw sandbox** can be the brain.
+Every tool OpenClaw calls goes through the **same validation, preconditions, state machine and audit trail** as ReRoute's own agent; the
+MCP surface has no approve or execute tool at all.
+
+```mermaid
+flowchart LR
+    op([Operator]) -->|chat| oc
+    subgraph nemo["NVIDIA NemoClaw sandbox (OpenShell)"]
+        oc["OpenClaw<br/>Nemotron inference"]
+    end
+    oc -->|"MCP · HTTPS · Bearer<br/>(OpenShell protocol: mcp policy)"| mcp["ReRoute /mcp<br/>12 tools"]
+    mcp --> orch["ReRoute orchestrator<br/>validation · preconditions · state · events"]
+    orch --> svc["Airline API · NeMo Retriever · cuOpt"]
+    orch --> dash["Dashboard<br/>external-agent task shown live"]
+    op -->|"approve / reject (humans only)"| dash
+```
+
+```bash
+nemoclaw ops-copilot mcp add reroute --url https://<host>/mcp --env REROUTE_MCP_TOKEN   # HTTPS required
+nemoclaw ops-copilot skill install nvidia/skills/reroute-irops
+REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://<host>/mcp                        # check before connecting
+```
+
+- Two modes: OpenClaw **plans itself** (`open_recovery_task` → tools → `propose_rebooking`) or **delegates** to ReRoute's agent (`delegate_recovery`).
+- The dashboard detects tasks started by external agents and offers to follow them live.
+- Status: the MCP server is tested over real HTTP (legacy and modern protocol, guardrails and approval boundary). **A real NemoClaw/OpenClaw
+  sandbox has not been connected yet** (no NemoClaw or HTTPS endpoint in this environment). Procedure: [nvidia/nemoclaw](nvidia/nemoclaw/README.md)
+
 ## NVIDIA stack & run modes
 
 | Env | Real NVIDIA mode | Demo / fallback mode |
 |---|---|---|
-| `LLM_PROVIDER` | `nvidia` → Nemotron via NIM (default `nvidia/nemotron-3-super-120b-a12b`) | `mock` → deterministic planner, same tools & guardrails |
+| `LLM_PROVIDER` | `auto` (default) / `nvidia` → Nemotron via NIM (default `nvidia/nemotron-3-super-120b-a12b`) | only without a key → scripted planner, same tools & guardrails, warning banner in the UI |
 | `RETRIEVER_PROVIDER` | `nvidia` → `llama-nemotron-embed-1b-v2` + `llama-nemotron-rerank-1b-v2` | `lexical` → BM25 over the same documents |
 | `OPTIMIZATION_PROVIDER` | `cuopt` → cuOpt server (GPU) | `fallback` → HiGHS (CPU), **same** MILP object |
 | `SECURITY_RUNTIME` | `openshell` → agent worker inside an OpenShell sandbox | `policy-mirror` → same policy YAML evaluated in-process |
@@ -176,7 +228,7 @@ open http://localhost:3000      # API docs: http://localhost:8000/docs
 
 ```bash
 make install                    # uv venv (Python 3.12) + npm ci
-make test                       # 67 backend tests
+make test                       # 91 backend tests
 DATABASE_URL=sqlite:///./reroute.db make dev-api    # or a local PostgreSQL
 make dev-web                    # http://localhost:3000 (proxies /api to :8000)
 ```
@@ -284,6 +336,7 @@ min Σ delay·tier + VIP delay + downgrade + connection risk + rebooking cost + 
 | ![Welcome](docs/screenshots/01-welcome.png) Problem & pillars | ![Running](docs/screenshots/02-agent-running.png) Agent running — live tool timeline |
 | ![Completed](docs/screenshots/05-completed.png) Approved → executed, final report | ![Security](docs/screenshots/06-security-audit.png) OpenShell probes & audit log |
 | ![Bypass](docs/screenshots/04-bypass-blocked.png) Execute without approval → 403 | ![No action](docs/screenshots/07-no-action.png) KE125 delay: agent decides no action |
+| ![External agent](docs/screenshots/09-external-agent-banner.png) Task started by an external agent over MCP | ![External plan](docs/screenshots/10-external-agent-plan.png) Plan built by the external agent (humans approve) |
 
 Full-page views: [plan](docs/screenshots/03b-plan-full.png) · [completed](docs/screenshots/05b-completed-full.png) · [judge guide](docs/screenshots/08-guide.png)
 
@@ -291,7 +344,7 @@ Full-page views: [plan](docs/screenshots/03b-plan-full.png) · [completed](docs/
 
 ```
 apps/api      FastAPI: mock airline API, agent (orchestrator, tools, LLM adapters), RAG, optimization,
-              approval gateway, audit, OpenShell policy mirror, worker — 67 tests
+              approval gateway, audit, OpenShell policy mirror, worker, MCP server — 91 tests
 apps/web      Next.js + TypeScript + Tailwind operations dashboard and judge guide
 documents     airline policy corpus (IROP, RBK, SSR, FARE, VIP, MCT) with machine-readable params
 data/seed     KE123 scenario: 9 flights, 35 passengers
@@ -304,7 +357,7 @@ tests/e2e     smoke test of the MVP definition of done
 
 ## Quality
 
-- 67 backend tests: flight / passenger lookup, policy retrieval & provenance, every optimization constraint (C1–C6), weights, cuOpt REST contract, approval required, unauthorized execution blocked, token tampering, expiry, successful rebooking, OpenShell policy schema & decisions, NIM request contract & fallback, DB-less remote worker over real HTTP, schema migration.
+- 91 backend tests: flight / passenger lookup, policy retrieval & provenance, every optimization constraint (C1–C6), weights, cuOpt REST contract, approval required, unauthorized execution blocked, token tampering, expiry, successful rebooking, OpenShell policy schema & decisions, NIM request contract & fallback, DB-less remote worker over real HTTP, schema migration.
 - End-to-end smoke test (`tests/e2e/smoke.sh`) and a Playwright walkthrough of the dashboard.
 - CI: lint, tests + smoke on PostgreSQL, web typecheck/build, `terraform validate`, Docker builds.
 

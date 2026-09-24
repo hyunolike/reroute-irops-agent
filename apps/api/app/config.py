@@ -21,7 +21,7 @@ _DEFAULT_ROOT = _default_root()
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore", populate_by_name=True)
 
     app_name: str = "ReRoute"
     project_root: Path = Field(default=_DEFAULT_ROOT)
@@ -48,7 +48,8 @@ class Settings(BaseSettings):
     agent_step_delay_ms: int = 0
 
     # --- LLM: NVIDIA NIM (Nemotron) or deterministic mock ---
-    llm_provider: Literal["nvidia", "mock"] = "mock"
+    # auto: Nemotron via NIM when NVIDIA_API_KEY is set, otherwise the scripted planner (clearly labelled)
+    llm_provider: Literal["auto", "nvidia", "mock"] = "auto"
     nvidia_api_key: SecretStr | None = None
     nim_base_url: str = "https://integrate.api.nvidia.com/v1"
     nim_model: str = "nvidia/nemotron-3-super-120b-a12b"
@@ -56,6 +57,9 @@ class Settings(BaseSettings):
     nim_enable_thinking: bool = False
     nim_timeout_seconds: float = 60.0
     nim_temperature: float = 0.0
+    nim_max_retries: int = 2
+    # Maximum planner turns per task (a real model may call tools one at a time)
+    agent_max_steps: int = 30
 
     # --- Retrieval: NeMo Retriever NIMs or local lexical index ---
     retriever_provider: Literal["nvidia", "lexical"] = "lexical"
@@ -85,6 +89,12 @@ class Settings(BaseSettings):
 
     documents_dir: Path | None = None
     seed_dir: Path | None = None
+    # --- MCP server for external agents (OpenClaw in NemoClaw). Disabled unless a bearer token is set.
+    mcp_bearer_token: SecretStr | None = Field(default=None, validation_alias="REROUTE_MCP_TOKEN")
+    # Host headers accepted on /mcp (DNS-rebinding protection); add your public hostname, e.g. "reroute.example.com"
+    mcp_allowed_hosts: str = "localhost:*,127.0.0.1:*,reroute-api:*,testserver,test"
+    public_url: str = "http://localhost:3000"
+
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     allow_demo_reset: bool = True
 

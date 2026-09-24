@@ -4,11 +4,15 @@ environment = "demo"
 # GPU host with NVIDIA cuOpt (g6.xlarge = 1x NVIDIA L4). Set false for a cheaper CPU-only demo.
 enable_gpu = true
 
-llm_provider       = "nvidia" # falls back to the labelled mock planner if the NVIDIA key secret is empty
+llm_provider       = "auto"   # Nemotron when the NVIDIA key secret is set; otherwise the labelled scripted planner
 retriever_provider = "nvidia"
 nim_model          = "nvidia/nemotron-3-super-120b-a12b"
 
 image_tag = "latest"
+
+# HTTPS + DNS name - required for the MCP endpoint used by NemoClaw (OpenClaw)
+# public_hostname = "reroute.example.com"
+# enable_mcp      = true
 
 # Optional HTTPS
 # certificate_arn = "arn:aws:acm:ap-northeast-2:123456789012:certificate/..."
