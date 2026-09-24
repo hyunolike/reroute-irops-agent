@@ -21,7 +21,8 @@
 |---|---|
 | 🎬 Demo in one command | `docker compose up --build` → http://localhost:3000 → **Run Agent** |
 | 📖 3-minute judge guide | http://localhost:3000/guide · [docs/demo-scenario.md](docs/demo-scenario.md) |
-| 🧭 Architecture (7 Mermaid diagrams) | [docs/architecture.en.md](docs/architecture.en.md) · [한국어](docs/architecture.md) |
+| 🤖 Agent structure & behaviour (7 diagrams) | [docs/agent.en.md](docs/agent.en.md) · [한국어](docs/agent.md) |
+| 🧭 System architecture (7 Mermaid diagrams) | [docs/architecture.en.md](docs/architecture.en.md) · [한국어](docs/architecture.md) |
 | 🟩 NVIDIA integration & verification status | [docs/nvidia-integration.md](docs/nvidia-integration.md) · [nvidia/](nvidia/) |
 | ☁️ AWS deployment (Terraform) | [infra/terraform/README.en.md](infra/terraform/README.en.md) · [한국어](infra/terraform/README.md) |
 
@@ -132,6 +133,8 @@ OPTIMIZING → GENERATING_PROPOSAL → WAITING_APPROVAL → EXECUTING → COMPLE
 persisted and streamed to the UI over SSE. Detailed diagrams: [docs/architecture.en.md](docs/architecture.en.md).
 
 ## How the LLM agent works
+
+> As diagrams: [docs/agent.en.md](docs/agent.en.md) — structure, loop, one run, who decides what, recovery paths
 
 With the default `LLM_PROVIDER=auto` and an NVIDIA key, **Nemotron chooses the next tool at every step** — there is no fixed order.
 
