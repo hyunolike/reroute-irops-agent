@@ -154,18 +154,40 @@ function RowView({ row, compact }: { row: Row; compact?: boolean }) {
   const { call, result } = row;
   const err = result?.type === "TOOL_ERROR";
   const tool = call.detail.tool as string;
-  if (compact) {
-    const hits = (result?.detail.hits ?? []) as { policy_id: string }[];
+  if (compact && tool === "search_rebooking_policy") {
+    const queries = (call.detail.args?.queries ?? []) as string[];
+    const ids = [...new Set(((result?.detail.hits ?? []) as { policy_id: string }[]).map((h) => h.policy_id))].sort();
+    const missing = (result?.detail.coverage?.missing ?? []) as string[];
     return (
-      <div className="animate-slideIn flex flex-wrap items-center gap-1.5 text-[11px] text-slate-300">
-        <ComponentBadge c={result?.component ?? call.component} />
-        <span className="truncate text-ops-muted">“{call.detail.args?.query}”</span>
-        {!result && <Loader2 className="h-3 w-3 animate-spin text-nv" />}
-        {hits.slice(0, 2).map((h) => (
-          <span key={h.policy_id} className="rounded bg-ops-panel2 px-1 font-mono text-[10px] text-nv-light">
-            {h.policy_id}
+      <div className={cx("animate-slideIn rounded-md border px-2 py-1.5", err ? "border-rose-500/30 bg-rose-500/5" : "border-ops-line bg-ops-panel2/70")}>
+        <div className="flex items-center gap-2">
+          <ComponentBadge c={result?.component ?? call.component} />
+          <code className="font-mono text-[11px] text-sky-300">{tool}()</code>
+          <span className="text-[10px] text-ops-muted">{queries.length} queries</span>
+          <span className="ml-auto shrink-0 font-mono text-[10px] text-ops-muted">
+            {result ? `${Math.round(result.duration_ms ?? 0)} ms` : <Loader2 className="h-3 w-3 animate-spin text-nv" />}
           </span>
-        ))}
+        </div>
+        <div className="mt-1 space-y-0.5">
+          {queries.map((q) => (
+            <div key={q} className="truncate text-[11px] text-ops-muted">
+              “{q}”
+            </div>
+          ))}
+        </div>
+        {result && !err && (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {ids.map((id) => (
+              <span key={id} className="rounded bg-ops-bg px-1 font-mono text-[10px] text-nv-light">
+                {id}
+              </span>
+            ))}
+            <span className={cx("ml-1 text-[10px]", missing.length ? "text-amber-300" : "text-emerald-300")}>
+              {missing.length ? `still missing: ${missing.join(", ")}` : "✓ policy coverage complete"}
+            </span>
+          </div>
+        )}
+        {err && <div className="mt-1 text-xs text-rose-200">✕ {result?.title}</div>}
       </div>
     );
   }

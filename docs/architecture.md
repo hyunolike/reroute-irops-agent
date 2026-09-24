@@ -34,7 +34,7 @@ flowchart TB
     end
 
     subgraph sandbox["NVIDIA OpenShell 샌드박스"]
-        agent["ReRoute 에이전트 런타임<br/>오케스트레이터 + 도구"]
+        agent["ReRoute 에이전트 런타임<br/>오케스트레이터 + 도구 8종"]
     end
 
     agentapi -. "inline 모드" .-> agent

@@ -29,7 +29,7 @@
 
 ## Contents
 1. [Problem](#problem) · 2. [Solution](#solution) · 3. [Why Agentic AI?](#why-agentic-ai) · 4. [Why NVIDIA?](#why-nvidia)
-5. [Architecture](#architecture) · 6. [NVIDIA stack & run modes](#nvidia-stack--run-modes) · 7. [Demo](#demo) · 8. [Getting started](#getting-started)
+5. [Architecture](#architecture) · [How the LLM agent works](#how-the-llm-agent-works) · 6. [NVIDIA stack & run modes](#nvidia-stack--run-modes) · 7. [Demo](#demo) · 8. [Getting started](#getting-started)
 9. [AWS deployment](#aws-deployment) · 10. [Security](#security) · 11. [Optimization](#optimization) · 12. [Screenshots](#screenshots) · 13. [Future work](#future-work)
 
 ---
@@ -109,7 +109,7 @@ flowchart TB
     op([Operator]) --> web["Next.js Operations Dashboard"]
     web -- "REST + SSE (/api/*)" --> cp["ReRoute control plane (FastAPI)<br/>Agent API · Approval Gateway · Audit<br/>Knowledge service · Optimization service"]
     subgraph sandbox["NVIDIA OpenShell sandbox"]
-        agent["ReRoute Agent<br/>orchestrator + 7 typed tools"]
+        agent["ReRoute Agent<br/>orchestrator + 8 typed tools"]
     end
     cp <--> agent
     agent -- "tool calling" --> nim["Nemotron via NIM"]
@@ -125,17 +125,36 @@ flowchart TB
 - With `AGENT_EXECUTION=remote` the agent runs as a separate worker **with no DB credentials and no approval-signing key** — the process that runs inside an OpenShell sandbox.
 
 **Tools:** `get_disrupted_flight` · `get_affected_passengers` · `search_alternative_flights` · `search_rebooking_policy` ·
-`optimize_rebooking` · `propose_rebooking` · `execute_rebooking` *(approval required)*
+`optimize_rebooking` · `explore_exception_options` · `propose_rebooking` · `execute_rebooking` *(approval required)*
 
 **State machine:** `RECEIVED → ANALYZING_DISRUPTION → FETCHING_PASSENGERS → SEARCHING_ALTERNATIVES → RETRIEVING_POLICIES →
 OPTIMIZING → GENERATING_PROPOSAL → WAITING_APPROVAL → EXECUTING → COMPLETED` (+ `REJECTED`, `FAILED`). Every transition is
 persisted and streamed to the UI over SSE. Detailed diagrams: [docs/architecture.en.md](docs/architecture.en.md).
 
+## How the LLM agent works
+
+With the default `LLM_PROVIDER=auto` and an NVIDIA key, **Nemotron chooses the next tool at every step** — there is no fixed order.
+
+| Design element | Role |
+|---|---|
+| Plan first | The first reply is a 3–6 step plan; before each tool call the model writes a short rationale in the operator's language (shown in the timeline) |
+| Tool feedback | Policy search returns `coverage` (grounded rules / missing rules / suggested queries), so the model decides when to search more |
+| Exception reasoning | After optimization, `explore_exception_options` examines each exception passenger's options and blocking constraints; grounded actions go into the briefing |
+| Guardrails | Wrong order / arguments come back as errors for the model to fix; if it stops early it gets a **concrete next-step instruction** (up to 2×) |
+| Robustness | Text-form tool calls (`<TOOLCALL>` …) are parsed, `<think>` separated, 429/5xx retried. Only if it still cannot finish does the scripted planner take over — and that is logged |
+| Decision boundary | The model cannot change the allocation (the solver decides) and cannot change bookings without approval |
+
+Real-model evaluation: `NVIDIA_API_KEY=nvapi-... make eval-llm` runs 4 scenarios (cancellation KO/EN, delay, unknown flight) on Nemotron and
+scores final state, tools used, guidance interventions, fallback, and solver result.
+
+> Status: no run against real Nemotron yet (this dev environment has no key and its network blocks the NVIDIA endpoint). Tests with
+> fake models that behave imperfectly (one tool per turn, wrong order, wrong argument shape, stopping early) verify the agent still completes.
+
 ## NVIDIA stack & run modes
 
 | Env | Real NVIDIA mode | Demo / fallback mode |
 |---|---|---|
-| `LLM_PROVIDER` | `nvidia` → Nemotron via NIM (default `nvidia/nemotron-3-super-120b-a12b`) | `mock` → deterministic planner, same tools & guardrails |
+| `LLM_PROVIDER` | `auto` (default) / `nvidia` → Nemotron via NIM (default `nvidia/nemotron-3-super-120b-a12b`) | only without a key → scripted planner, same tools & guardrails, warning banner in the UI |
 | `RETRIEVER_PROVIDER` | `nvidia` → `llama-nemotron-embed-1b-v2` + `llama-nemotron-rerank-1b-v2` | `lexical` → BM25 over the same documents |
 | `OPTIMIZATION_PROVIDER` | `cuopt` → cuOpt server (GPU) | `fallback` → HiGHS (CPU), **same** MILP object |
 | `SECURITY_RUNTIME` | `openshell` → agent worker inside an OpenShell sandbox | `policy-mirror` → same policy YAML evaluated in-process |
@@ -176,7 +195,7 @@ open http://localhost:3000      # API docs: http://localhost:8000/docs
 
 ```bash
 make install                    # uv venv (Python 3.12) + npm ci
-make test                       # 67 backend tests
+make test                       # 84 backend tests
 DATABASE_URL=sqlite:///./reroute.db make dev-api    # or a local PostgreSQL
 make dev-web                    # http://localhost:3000 (proxies /api to :8000)
 ```
@@ -291,7 +310,7 @@ Full-page views: [plan](docs/screenshots/03b-plan-full.png) · [completed](docs/
 
 ```
 apps/api      FastAPI: mock airline API, agent (orchestrator, tools, LLM adapters), RAG, optimization,
-              approval gateway, audit, OpenShell policy mirror, worker — 67 tests
+              approval gateway, audit, OpenShell policy mirror, worker — 84 tests
 apps/web      Next.js + TypeScript + Tailwind operations dashboard and judge guide
 documents     airline policy corpus (IROP, RBK, SSR, FARE, VIP, MCT) with machine-readable params
 data/seed     KE123 scenario: 9 flights, 35 passengers
@@ -304,7 +323,7 @@ tests/e2e     smoke test of the MVP definition of done
 
 ## Quality
 
-- 67 backend tests: flight / passenger lookup, policy retrieval & provenance, every optimization constraint (C1–C6), weights, cuOpt REST contract, approval required, unauthorized execution blocked, token tampering, expiry, successful rebooking, OpenShell policy schema & decisions, NIM request contract & fallback, DB-less remote worker over real HTTP, schema migration.
+- 84 backend tests: flight / passenger lookup, policy retrieval & provenance, every optimization constraint (C1–C6), weights, cuOpt REST contract, approval required, unauthorized execution blocked, token tampering, expiry, successful rebooking, OpenShell policy schema & decisions, NIM request contract & fallback, DB-less remote worker over real HTTP, schema migration.
 - End-to-end smoke test (`tests/e2e/smoke.sh`) and a Playwright walkthrough of the dashboard.
 - CI: lint, tests + smoke on PostgreSQL, web typecheck/build, `terraform validate`, Docker builds.
 

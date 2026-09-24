@@ -47,7 +47,7 @@ export function TopBar({ runtime, onReset, resetting }: { runtime: Runtime | nul
                 label="Reasoning"
                 value={runtime.llm.nvidia ? runtime.llm.model.replace("nvidia/", "") : "Mock planner (demo)"}
                 nvidia={runtime.llm.nvidia}
-                title={runtime.llm.nvidia ? "NVIDIA NIM - Nemotron tool calling" : "LLM_PROVIDER=mock - deterministic scripted planner"}
+                title={runtime.llm.reason ?? (runtime.llm.nvidia ? "NVIDIA NIM - Nemotron tool calling" : "scripted planner")}
               />
               <RuntimeChip
                 icon={<Database className="h-4 w-4" />}

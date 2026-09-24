@@ -32,8 +32,21 @@ async def test_full_workflow_states_and_tools(client, container):
     assert states == EXPECTED_STATES
     tools = [e["detail"]["tool"] for e in evs if e["type"] == "TOOL_CALL"]
     assert tools[:3] == ["get_disrupted_flight", "get_affected_passengers", "search_alternative_flights"]
-    assert tools[-2:] == ["optimize_rebooking", "propose_rebooking"]
-    assert tools.count("search_rebooking_policy") >= 9
+    assert tools[-1] == "propose_rebooking"
+    assert tools.index("optimize_rebooking") < tools.index("explore_exception_options")
+    queries = [
+        q
+        for e in evs
+        if e["type"] == "TOOL_CALL" and e["detail"]["tool"] == "search_rebooking_policy"
+        for q in e["detail"]["args"]["queries"]
+    ]
+    assert len(queries) >= 9
+    explored = {
+        e["detail"]["args"]["passenger_id"]
+        for e in evs
+        if e["type"] == "TOOL_CALL" and e["detail"]["tool"] == "explore_exception_options"
+    }
+    assert explored == {"P010", "P011", "P013", "P014"}  # every exception passenger was analysed
     assert not [e for e in evs if e["type"] in ("TOOL_ERROR", "GUARDRAIL")]
 
     plan = (await client.get(f"/api/rebooking/plans/{task['plan_id']}")).json()

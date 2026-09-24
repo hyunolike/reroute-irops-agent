@@ -18,11 +18,13 @@ from app.security.governed_http import GovernedHttpClient
 class AgentMemory:
     flight: FlightDTO | None = None
     flight_assessment: str | None = None  # "recover" | "no_recovery" | "check_policy"
+    flight_lookup_failed: bool = False
     passengers: list[AffectedPassengerDTO] = field(default_factory=list)
     alternatives: list[FlightDTO] = field(default_factory=list)
     policy_hits: dict[str, PolicyHit] = field(default_factory=dict)
     policy_queries: list[str] = field(default_factory=list)
     optimization: OptimizationResult | None = None
+    exception_analyses: dict[str, dict[str, Any]] = field(default_factory=dict)
     briefing: str | None = None
     plan_id: str | None = None
     approval_id: str | None = None

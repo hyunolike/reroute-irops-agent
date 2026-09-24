@@ -46,7 +46,7 @@ services:
       AGENT_EXECUTION: ${AGENT_EXECUTION:-inline}
       AGENT_WORKER_TOKEN: ${AGENT_WORKER_TOKEN:-}
       AGENT_STEP_DELAY_MS: ${AGENT_STEP_DELAY_MS:-350}
-      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
       NIM_MODEL: ${NIM_MODEL:-nvidia/nemotron-3-super-120b-a12b}
       RETRIEVER_PROVIDER: ${RETRIEVER_PROVIDER:-lexical}
@@ -93,7 +93,7 @@ services:
       REROUTE_API_BASE_URL: http://reroute-api:8000
       AGENT_WORKER_TOKEN: ${AGENT_WORKER_TOKEN:-}
       AGENT_STEP_DELAY_MS: ${AGENT_STEP_DELAY_MS:-350}
-      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
       NIM_MODEL: ${NIM_MODEL:-nvidia/nemotron-3-super-120b-a12b}
       SECURITY_RUNTIME: ${SECURITY_RUNTIME:-policy-mirror}

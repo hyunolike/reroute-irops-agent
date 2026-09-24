@@ -28,7 +28,7 @@
 
 ## 목차
 1. [문제](#문제) · 2. [해결책](#해결책) · 3. [왜 Agentic AI인가](#왜-agentic-ai인가) · 4. [왜 NVIDIA인가](#왜-nvidia인가)
-5. [아키텍처](#아키텍처) · 6. [NVIDIA 스택과 실행 모드](#nvidia-스택과-실행-모드) · 7. [데모](#데모) · 8. [시작하기](#시작하기)
+5. [아키텍처](#아키텍처) · [LLM 에이전트 동작 방식](#llm-에이전트-동작-방식) · 6. [NVIDIA 스택과 실행 모드](#nvidia-스택과-실행-모드) · 7. [데모](#데모) · 8. [시작하기](#시작하기)
 9. [AWS 배포](#aws-배포) · 10. [보안](#보안) · 11. [최적화 모델](#최적화-모델) · 12. [화면](#화면) · 13. [향후 계획](#향후-계획)
 
 ---
@@ -107,7 +107,7 @@ flowchart TB
     op([운영자]) --> web["Next.js 운영 대시보드"]
     web -- "REST + SSE (/api/*)" --> cp["ReRoute 컨트롤 플레인 (FastAPI)<br/>Agent API · 승인 게이트웨이 · 감사 로그<br/>지식 서비스 · 최적화 서비스"]
     subgraph sandbox["NVIDIA OpenShell 샌드박스"]
-        agent["ReRoute 에이전트<br/>오케스트레이터 + 도구 7종"]
+        agent["ReRoute 에이전트<br/>오케스트레이터 + 도구 8종"]
     end
     cp <--> agent
     agent -- "도구 호출 (tool calling)" --> nim["Nemotron (NIM)"]
@@ -123,18 +123,37 @@ flowchart TB
 - `AGENT_EXECUTION=remote`로 두면 에이전트는 **DB 접속 정보도, 승인 서명 키도 없는** 별도 worker 프로세스로 실행됩니다. 이 worker가 OpenShell 샌드박스에서 돌아가는 대상입니다.
 
 **도구:** `get_disrupted_flight` · `get_affected_passengers` · `search_alternative_flights` · `search_rebooking_policy` ·
-`optimize_rebooking` · `propose_rebooking` · `execute_rebooking` *(승인 필요)*
+`optimize_rebooking` · `explore_exception_options` · `propose_rebooking` · `execute_rebooking` *(승인 필요)*
 
 **상태 머신:** `RECEIVED → ANALYZING_DISRUPTION → FETCHING_PASSENGERS → SEARCHING_ALTERNATIVES → RETRIEVING_POLICIES →
 OPTIMIZING → GENERATING_PROPOSAL → WAITING_APPROVAL → EXECUTING → COMPLETED` (+ `REJECTED`, `FAILED`).
 모든 상태 변경은 DB에 저장되고 SSE로 화면에 실시간 전달됩니다. 상세 다이어그램(상태도·시퀀스·보안 경계·승인 흐름·최적화 흐름·배포)은
 [docs/architecture.md](docs/architecture.md)에 있습니다.
 
+## LLM 에이전트 동작 방식
+
+기본값 `LLM_PROVIDER=auto`에서는 NVIDIA 키가 있으면 **Nemotron이 매 단계 다음 도구를 직접 고릅니다**. 정해진 순서는 없습니다.
+
+| 설계 요소 | 역할 |
+|---|---|
+| 계획 먼저 | 첫 응답에서 3~6단계 계획을 세우고, 매 도구 호출 전에 운영자의 언어로 짧은 추론을 남깁니다 (타임라인에 표시) |
+| 도구 피드백 | 규정 검색 결과에 `coverage`(확보된 규정 / 빠진 규정 / 추천 질의)가 포함되어, 모델이 스스로 추가 검색을 판단합니다 |
+| 예외 추론 | 최적화 후 `explore_exception_options`로 예외 승객의 선택지와 차단 사유를 조사하고, 근거 있는 조치를 브리핑에 담습니다 |
+| 가드레일 | 잘못된 순서·인자는 오류로 되돌려 모델이 고치게 합니다. 모델이 일찍 멈추면 **다음에 할 일을 구체적으로 안내**합니다 (최대 2회) |
+| 견고성 | 텍스트로 온 도구 호출(`<TOOLCALL>` 등) 파싱, `<think>` 분리, 429/5xx 재시도. 끝까지 진행이 안 될 때만 스크립트 플래너가 이어받고 그 사실을 기록합니다 |
+| 결정 경계 | 모델은 배정을 바꿀 수 없고(solver가 결정), 예약 변경은 승인 없이 불가능합니다 |
+
+실제 모델 평가: `NVIDIA_API_KEY=nvapi-... make eval-llm` → 시나리오 4개(결항 국문/영문, 지연, 없는 편)를 Nemotron으로 실행하고,
+최종 상태 · 사용 도구 · 안내 개입 횟수 · 스크립트 플래너 전환 여부 · solver 결과를 채점합니다.
+
+> 현재 상태: 실제 Nemotron으로 실행한 결과는 아직 없습니다(이 개발 환경에는 키가 없고 NVIDIA 엔드포인트 접속도 막혀 있음).
+> 실제 모델의 불완전한 행동(도구 하나씩 호출, 순서 오류, 인자 형식 오류, 중간 멈춤)을 흉내 낸 테스트로 끝까지 완료되는 것은 검증했습니다.
+
 ## NVIDIA 스택과 실행 모드
 
 | 환경 변수 | 실제 NVIDIA 모드 | 데모 / 대체(Fallback) 모드 |
 |---|---|---|
-| `LLM_PROVIDER` | `nvidia` → NIM의 Nemotron (기본 `nvidia/nemotron-3-super-120b-a12b`) | `mock` → 결정론적 플래너 (도구·가드레일은 동일) |
+| `LLM_PROVIDER` | `auto`(기본) / `nvidia` → NIM의 Nemotron (기본 `nvidia/nemotron-3-super-120b-a12b`) | 키가 없을 때만 → 스크립트 플래너 (도구·가드레일은 동일, 화면에 경고 표시) |
 | `RETRIEVER_PROVIDER` | `nvidia` → `llama-nemotron-embed-1b-v2` + `llama-nemotron-rerank-1b-v2` | `lexical` → 같은 문서에 대한 BM25 검색 |
 | `OPTIMIZATION_PROVIDER` | `cuopt` → cuOpt 서버 (GPU) | `fallback` → HiGHS (CPU), **같은** MILP 객체 |
 | `SECURITY_RUNTIME` | `openshell` → OpenShell 샌드박스 안의 에이전트 worker | `policy-mirror` → 같은 정책 YAML을 프로세스 안에서 평가 |
@@ -175,7 +194,7 @@ open http://localhost:3000      # API 문서: http://localhost:8000/docs
 
 ```bash
 make install                    # uv 가상환경(Python 3.12) + npm ci
-make test                       # 백엔드 테스트 67개
+make test                       # 백엔드 테스트 84개
 DATABASE_URL=sqlite:///./reroute.db make dev-api    # 또는 로컬 PostgreSQL
 make dev-web                    # http://localhost:3000 (/api는 :8000으로 프록시)
 ```
@@ -294,7 +313,7 @@ C6  항공사·시간 한도·운항 상태가 규정상 허용   (IROP-002, IRO
 
 ```
 apps/api      FastAPI: Mock 항공사 API, 에이전트(오케스트레이터·도구·LLM 어댑터), RAG, 최적화,
-              승인 게이트웨이, 감사 로그, OpenShell 정책 평가, worker — 테스트 67개
+              승인 게이트웨이, 감사 로그, OpenShell 정책 평가, worker — 테스트 84개
 apps/web      Next.js + TypeScript + Tailwind 운영 대시보드와 심사위원 가이드
 documents     항공사 규정 문서 (IROP, RBK, SSR, FARE, VIP, MCT) + 기계가 읽는 파라미터
 data/seed     KE123 시나리오: 항공편 9편, 승객 35명
@@ -307,7 +326,7 @@ tests/e2e     MVP 완료 기준 자동 점검
 
 ## 품질
 
-- 백엔드 테스트 67개: 운항·승객 조회, 규정 검색과 출처, 최적화 제약 C1–C6 전부, 가중치, cuOpt REST 형식,
+- 백엔드 테스트 84개: 운항·승객 조회, 규정 검색과 출처, 최적화 제약 C1–C6 전부, 가중치, cuOpt REST 형식,
   승인 필수, 무단 실행 차단, 토큰 변조, 승인 만료, 재배정 성공, OpenShell 정책 스키마와 판정, NIM 요청 형식과 장애 시 전환,
   DB 없는 원격 worker(실제 HTTP), 스키마 마이그레이션.
 - 전체 흐름 자동 점검(`tests/e2e/smoke.sh`)과 Playwright 브라우저 시연.

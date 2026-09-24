@@ -59,12 +59,12 @@ variable "cuopt_image" {
 }
 
 variable "llm_provider" {
-  description = "nvidia = Nemotron via NIM (requires the NVIDIA API key secret to be set), mock = demo planner."
+  description = "auto/nvidia = Nemotron via NIM (needs the NVIDIA API key secret; without it the labelled scripted planner is used), mock = scripted planner."
   type        = string
-  default     = "nvidia"
+  default     = "auto"
   validation {
-    condition     = contains(["nvidia", "mock"], var.llm_provider)
-    error_message = "llm_provider must be nvidia or mock."
+    condition     = contains(["auto", "nvidia", "mock"], var.llm_provider)
+    error_message = "llm_provider must be auto, nvidia or mock."
   }
 }
 

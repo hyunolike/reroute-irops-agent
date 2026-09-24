@@ -48,7 +48,8 @@ class Settings(BaseSettings):
     agent_step_delay_ms: int = 0
 
     # --- LLM: NVIDIA NIM (Nemotron) or deterministic mock ---
-    llm_provider: Literal["nvidia", "mock"] = "mock"
+    # auto: Nemotron via NIM when NVIDIA_API_KEY is set, otherwise the scripted planner (clearly labelled)
+    llm_provider: Literal["auto", "nvidia", "mock"] = "auto"
     nvidia_api_key: SecretStr | None = None
     nim_base_url: str = "https://integrate.api.nvidia.com/v1"
     nim_model: str = "nvidia/nemotron-3-super-120b-a12b"
@@ -56,6 +57,9 @@ class Settings(BaseSettings):
     nim_enable_thinking: bool = False
     nim_timeout_seconds: float = 60.0
     nim_temperature: float = 0.0
+    nim_max_retries: int = 2
+    # Maximum planner turns per task (a real model may call tools one at a time)
+    agent_max_steps: int = 30
 
     # --- Retrieval: NeMo Retriever NIMs or local lexical index ---
     retriever_provider: Literal["nvidia", "lexical"] = "lexical"

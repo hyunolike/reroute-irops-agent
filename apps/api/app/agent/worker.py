@@ -17,9 +17,7 @@ from app.agent.orchestrator import AgentOrchestrator
 from app.agent.remote import ControlPlaneClient, RemoteAgentRepository, RemoteApprovalGateway, RemoteAuditService
 from app.config import Settings, get_settings
 from app.domain.enums import Component
-from app.providers.llm.base import LLMProvider
-from app.providers.llm.mock import MockLLMProvider
-from app.providers.llm.nim import NvidiaNimProvider
+from app.providers.llm.factory import build_llm
 from app.security.governed_http import GovernedHttpClient
 from app.security.policy import OpenShellPolicy
 from app.tools.airline import GetAffectedPassengers, GetDisruptedFlight, SearchAlternativeFlights
@@ -49,19 +47,8 @@ class AgentWorker:
             transport=internal_transport,
             timeout=settings.nim_timeout_seconds,
         )
-        key = settings.nvidia_api_key.get_secret_value() if settings.nvidia_api_key else ""
-        llm: LLMProvider = (
-            NvidiaNimProvider(
-                http,
-                key,
-                settings.nim_base_url,
-                settings.nim_model,
-                temperature=settings.nim_temperature,
-                enable_thinking=settings.nim_enable_thinking,
-            )
-            if settings.llm_provider == "nvidia" and key
-            else MockLLMProvider()
-        )
+        llm, reason = build_llm(settings, http)
+        log.info("reasoning model: %s", reason)
         tools = ToolRegistry(
             [
                 GetDisruptedFlight(),
@@ -87,6 +74,7 @@ class AgentWorker:
             security_component=Component.OPENSHELL if settings.security_runtime == "openshell" else Component.POLICY_MIRROR,
             component_overrides=overrides,
             step_delay_ms=settings.agent_step_delay_ms,
+            max_steps=settings.agent_max_steps,
         )
 
     async def run_once(self) -> bool:

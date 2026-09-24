@@ -39,7 +39,7 @@ export interface AgentEvent {
 
 export interface Runtime {
   demo_mode: boolean;
-  llm: { provider: string; model: string; nvidia: boolean };
+  llm: { provider: string; model: string; nvidia: boolean; reason?: string };
   retriever: { provider: string; nvidia: boolean; models: string[] };
   optimizer: { provider: string; nvidia: boolean; endpoint: string | null; fallback_enabled: boolean; health?: { ok: boolean } };
   security: { runtime: string; policy_file: string; enforced_by: string };

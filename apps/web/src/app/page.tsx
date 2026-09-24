@@ -62,6 +62,13 @@ export default function Dashboard() {
     <div className="min-h-screen">
       <TopBar runtime={runtime} onReset={onReset} resetting={resetting} />
       <main className="mx-auto max-w-[1600px] space-y-4 px-5 py-5">
+        {runtime && !runtime.llm.nvidia && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs text-amber-100">
+            <b className="text-amber-300">스크립트 플래너로 실행 중</b>
+            <span>— 에이전트 틀·도구·가드레일은 동일하지만, 다음 도구 선택은 Nemotron이 아닌 정해진 순서로 이뤄집니다.</span>
+            <span className="text-amber-200/80">{runtime.llm.reason}</span>
+          </div>
+        )}
         <DemoStepper state={task?.state} />
         <CommandPanel onRun={onRun} busy={busy} />
         {error && <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-2 text-sm text-rose-200">API error: {error}</div>}

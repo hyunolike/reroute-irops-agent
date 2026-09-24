@@ -75,13 +75,15 @@ class EventIn(BaseModel):
     state: str
     component: str
     title: str
-    detail: dict[str, Any] = Field(default_factory=dict)
+    detail: dict[str, Any] | None = None
     duration_ms: float | None = None
 
 
 @router.post("/tasks/{task_id}/events", status_code=201)
 def add_event(task_id: str, body: EventIn, c: Container = Depends(get_container)) -> dict:
-    ev = c.repo.add_event(task_id, **body.model_dump())
+    data = body.model_dump()
+    data["detail"] = data["detail"] or {}
+    ev = c.repo.add_event(task_id, **data)
     return {"seq": ev.seq}
 
 

@@ -10,6 +10,17 @@ from app.domain.models import PolicyHit, PolicyRules
 
 REQUIRED_RULES = ("own_carrier_first", "interline", "max_delay", "mct", "connection_risk", "ssr", "coterminal")
 
+# What to search for when a required rule is still missing (returned to the planner as a hint).
+SUGGESTED_QUERIES = {
+    "own_carrier_first": "airline fault cancellation re-protection own carrier",
+    "interline": "interline partner carrier agreement",
+    "max_delay": "maximum re-accommodation window hours",
+    "mct": "minimum connection time at the destination airport",
+    "connection_risk": "at-risk connection margin review",
+    "ssr": "special assistance passengers wheelchair unaccompanied minor",
+    "coterminal": "co-terminal airports",
+}
+
 # Conservative defaults when a required policy was not retrieved.
 _CONSERVATIVE = {
     "interline": {"allow_interline": False, "interline_partners": []},

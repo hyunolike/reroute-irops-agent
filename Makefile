@@ -6,7 +6,7 @@ AWS_REGION ?= ap-northeast-2
 TAG ?= latest
 TF := infra/terraform
 
-.PHONY: help up up-gpu up-worker down logs reset smoke test lint fmt dev-api dev-web install export-cuopt push redeploy tf-validate sandbox probes
+.PHONY: eval-llm help up up-gpu up-worker down logs reset smoke test lint fmt dev-api dev-web install export-cuopt push redeploy tf-validate sandbox probes
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[32m%-14s\033[0m %s\n", $$1, $$2}'
@@ -52,6 +52,9 @@ dev-api: ## Run API locally (needs PostgreSQL or DATABASE_URL=sqlite:///./rerout
 
 dev-web: ## Run web locally (proxies /api to :8000)
 	cd $(WEB) && npm run dev
+
+eval-llm: ## Score the agent on 4 scenarios with the configured LLM (set NVIDIA_API_KEY for Nemotron)
+	cd $(API) && .venv/bin/python -m app.agent.evaluate
 
 export-cuopt: ## Regenerate nvidia/cuopt/ke123-milp.json
 	cd $(API) && .venv/bin/python -m app.optimization.export_payload > ../../nvidia/cuopt/ke123-milp.json
