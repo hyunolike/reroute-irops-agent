@@ -187,7 +187,7 @@ REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://<도메인>/mcp            
 | 환경 변수 | 실제 NVIDIA 모드 | 데모 / 대체(Fallback) 모드 |
 |---|---|---|
 | `LLM_PROVIDER` | `auto`(기본) / `nvidia` → NIM의 Nemotron (기본 `nvidia/nemotron-3-super-120b-a12b`) | 키가 없을 때만 → 스크립트 플래너 (도구·가드레일은 동일, 화면에 경고 표시) |
-| `RETRIEVER_PROVIDER` | `nvidia` → `llama-nemotron-embed-1b-v2` + `llama-nemotron-rerank-1b-v2` | `lexical` → 같은 문서에 대한 BM25 검색 |
+| `RETRIEVER_PROVIDER` | `nvidia` → `nemotron-3-embed-1b` + `llama-nemotron-rerank-vl-1b-v2` | `lexical` → 같은 문서에 대한 BM25 검색 |
 | `OPTIMIZATION_PROVIDER` | `cuopt` → cuOpt 서버 (GPU) | `fallback` → HiGHS (CPU), **같은** MILP 객체 |
 | `SECURITY_RUNTIME` | `openshell` → OpenShell 샌드박스 안의 에이전트 worker | `policy-mirror` → 같은 정책 YAML을 프로세스 안에서 평가 |
 

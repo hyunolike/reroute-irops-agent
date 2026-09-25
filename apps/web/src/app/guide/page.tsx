@@ -197,7 +197,7 @@ min Σ delay·tier + VIP delay + downgrade
             <tbody className="text-slate-300">
               {[
                 ["Reasoning", "LLM_PROVIDER=auto + NVIDIA_API_KEY → Nemotron via NIM chooses every tool", "no key (or LLM_PROVIDER=mock) → scripted planner (same tools, same guardrails, warning banner)"],
-                ["Retrieval", "RETRIEVER_PROVIDER=nvidia → llama-nemotron-embed-1b-v2 + rerank-1b-v2", "RETRIEVER_PROVIDER=lexical → BM25 over the same documents"],
+                ["Retrieval", "RETRIEVER_PROVIDER=nvidia → nemotron-3-embed-1b + rerank-vl-1b-v2", "RETRIEVER_PROVIDER=lexical → BM25 over the same documents"],
                 ["Optimization", "OPTIMIZATION_PROVIDER=cuopt → cuOpt server (GPU)", "OPTIMIZATION_PROVIDER=fallback → HiGHS (CPU), same MILP"],
                 ["Sandbox", "SECURITY_RUNTIME=openshell → agent inside OpenShell", "SECURITY_RUNTIME=policy-mirror → same policy YAML evaluated in-process"],
               ].map((r) => (

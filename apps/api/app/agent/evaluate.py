@@ -8,7 +8,7 @@ by the normal settings (LLM_PROVIDER=auto -> Nemotron when a key is present) and
 final state, tools used, whether the model needed guidance or was replaced by the fallback planner, and that the
 allocation still came from the solver.
 
-The key and model settings are also read from the repo-root .env (the file docker compose uses), so
+The key, model and retriever settings are also read from the repo-root .env (the file docker compose uses), so
 `make eval-llm` works after the one-time .env setup; variables already set in the shell take precedence.
 """
 
@@ -134,9 +134,9 @@ async def run_scenario(sc: Scenario, workdir: Path, base: dict[str, Any]) -> dic
     }
 
 
-# Only the reasoning-model settings: the rest of .env (AGENT_EXECUTION, SECURITY_RUNTIME, ...) describes the
-# deployed stack, not this in-process run.
-_LLM_ENV = ("NVIDIA_API_KEY", "LLM_PROVIDER", "NIM_")
+# Only the NVIDIA model settings (reasoning + retrieval): the rest of .env (AGENT_EXECUTION, SECURITY_RUNTIME, ...)
+# describes the deployed stack, not this in-process run.
+_LLM_ENV = ("NVIDIA_API_KEY", "LLM_PROVIDER", "RETRIEVER_PROVIDER", "NIM_")
 
 
 def load_llm_env(path: Path) -> None:
