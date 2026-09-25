@@ -4,6 +4,12 @@
 
 **NVIDIA Korea Agentic AI Hackathon** entry
 
+![NVIDIA Nemotron](https://img.shields.io/badge/NVIDIA%20Nemotron-NIM-76B900?logo=nvidia&logoColor=white) ![NeMo Retriever](https://img.shields.io/badge/NeMo%20Retriever-RAG-76B900?logo=nvidia&logoColor=white) ![NVIDIA cuOpt](https://img.shields.io/badge/NVIDIA%20cuOpt-MILP-76B900?logo=nvidia&logoColor=white) ![NVIDIA OpenShell](https://img.shields.io/badge/NVIDIA%20OpenShell-sandbox-76B900?logo=nvidia&logoColor=white) ![NemoClaw](https://img.shields.io/badge/NemoClaw-OpenClaw%20%C2%B7%20MCP-76B900?logo=nvidia&logoColor=white)<br/>
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi&logoColor=white) ![Pydantic](https://img.shields.io/badge/Pydantic-2.13-E92063?logo=pydantic&logoColor=white) ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-D71F00?logo=sqlalchemy&logoColor=white) ![SciPy](https://img.shields.io/badge/SciPy-HiGHS-8CAAE6?logo=scipy&logoColor=white) ![MCP SDK](https://img.shields.io/badge/MCP%20SDK-2.2-111111?logo=modelcontextprotocol&logoColor=white)<br/>
+![Next.js](https://img.shields.io/badge/Next.js-15.5-000000?logo=nextdotjs&logoColor=white) ![React](https://img.shields.io/badge/React-19.1-087EA4?logo=react&logoColor=white) ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white) ![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-3.4-06B6D4?logo=tailwindcss&logoColor=white)<br/>
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white) ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white) ![Terraform](https://img.shields.io/badge/Terraform-AWS-844FBA?logo=terraform&logoColor=white) ![AWS](https://img.shields.io/badge/AWS-EC2%20GPU%20%C2%B7%20RDS%20%C2%B7%20ALB-232F3E) ![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-CI-2088FF?logo=githubactions&logoColor=white)<br/>
+![pytest](https://img.shields.io/badge/pytest-91%20tests-0A9EDC?logo=pytest&logoColor=white) ![Ruff](https://img.shields.io/badge/Ruff-lint-D7FF64?logo=ruff&logoColor=black) ![Playwright](https://img.shields.io/badge/Playwright-E2E-2EAD33)
+
 > An operator types one sentence — *"KE123편이 결항됐어. 영향 승객을 확인하고 최적 재배정안을 만들어줘."*
 > (*"KE123 is cancelled. Find the affected passengers and build the optimal re-accommodation plan."*)
 > The ReRoute agent plans on its own, calls tools, retrieves airline policies, computes the optimal re-accommodation
@@ -21,7 +27,7 @@
 |---|---|
 | 🎬 Demo in one command | `docker compose up --build` → http://localhost:3000 → **Run Agent** |
 | 📖 3-minute judge guide | http://localhost:3000/guide · [docs/demo-scenario.md](docs/demo-scenario.md) |
-| 🤖 Agent structure & behaviour (7 diagrams) | [docs/agent.en.md](docs/agent.en.md) · [한국어](docs/agent.md) |
+| 🤖 Agent structure & behaviour (8 diagrams) | [docs/agent.en.md](docs/agent.en.md) · [한국어](docs/agent.md) |
 | 🧭 System architecture (7 Mermaid diagrams) | [docs/architecture.en.md](docs/architecture.en.md) · [한국어](docs/architecture.md) |
 | 🟩 NVIDIA integration & verification status | [docs/nvidia-integration.md](docs/nvidia-integration.md) · [nvidia/](nvidia/) |
 | ☁️ AWS deployment (Terraform) | [infra/terraform/README.en.md](infra/terraform/README.en.md) · [한국어](infra/terraform/README.md) |
@@ -30,7 +36,7 @@
 
 ## Contents
 1. [Problem](#problem) · 2. [Solution](#solution) · 3. [Why Agentic AI?](#why-agentic-ai) · 4. [Why NVIDIA?](#why-nvidia)
-5. [Architecture](#architecture) · [How the LLM agent works](#how-the-llm-agent-works) · [NemoClaw · OpenClaw](#nemoclaw--openclaw-integration-mcp) · 6. [NVIDIA stack & run modes](#nvidia-stack--run-modes) · 7. [Demo](#demo) · 8. [Getting started](#getting-started)
+5. [Architecture](#architecture) · [How the LLM agent works](#how-the-llm-agent-works) · [NemoClaw · OpenClaw](#nemoclaw--openclaw-integration-mcp) · 6. [NVIDIA stack & run modes](#nvidia-stack--run-modes) · [Tech stack](#tech-stack) · 7. [Demo](#demo) · 8. [Getting started](#getting-started)
 9. [AWS deployment](#aws-deployment) · 10. [Security](#security) · 11. [Optimization](#optimization) · 12. [Screenshots](#screenshots) · 13. [Future work](#future-work)
 
 ---
@@ -194,6 +200,78 @@ REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://<host>/mcp                 
 
 **Honesty rule:** runtime chips and every timeline badge show the implementation that actually ran — green for NVIDIA, amber for
 fallbacks. A fallback is never labelled as NVIDIA; automatic fallbacks are recorded as `GUARDRAIL` events.
+
+## Tech stack
+
+Versions are the ones tested in this repository; `pyproject.toml` and `package.json` declare minimums.
+"Status" says how far each piece is verified in this repository (details: [docs/nvidia-integration.md](docs/nvidia-integration.md)).
+
+### NVIDIA AI
+
+| Technology | Version · model | Role in ReRoute | Status |
+|---|---|---|---|
+| [Nemotron](https://build.nvidia.com) via **NIM** | `nvidia/nemotron-3-super-120b-a12b` (OpenAI-compatible Chat Completions, function calling) | Understands the goal, plans, picks the next tool, writes the operator briefing | Request/response format tested. Live calls need `NVIDIA_API_KEY` |
+| [NeMo Retriever](https://build.nvidia.com) | `llama-nemotron-embed-1b-v2` + `llama-nemotron-rerank-1b-v2` | Airline policy retrieval (embed → rerank) | Implemented. Falls back to BM25 without a key (shown in the UI) |
+| [cuOpt](https://github.com/NVIDIA/cuopt) | cuOpt server REST (`nvidia/cuopt:latest-cu12`) | Optimal passenger × flight × cabin MILP allocation | Request format tested; optimum cross-checked from the request file. Live run needs a GPU |
+| [OpenShell](https://github.com/NVIDIA/OpenShell) | policy schema `version: 1` | Agent sandbox: egress, filesystem, process and credential control | Policy file validated. Sandbox run documented |
+| [NemoClaw](https://github.com/NVIDIA/NemoClaw) · OpenClaw | `nemoclaw <sandbox> mcp add` | OpenClaw uses ReRoute's tools over MCP | ReRoute MCP server verified. NemoClaw hookup documented |
+| [NVIDIA Skills](https://github.com/NVIDIA/skills) | `cuopt-numerical-optimization-formulation`, `cuopt-server-api-python`, `nemo-retriever` | Reference for the MILP formulation, cuOpt API and RAG implementation | Design reference |
+
+### Agent · AI
+
+| Technology | Version | Role |
+|---|---|---|
+| Custom agent orchestrator (Python) | — | Tool-calling loop, guardrails, state machine, event log. Written directly, no framework (LangGraph etc.) |
+| [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) (`mcp`) | 2.2 | Exposes ReRoute's tools as an MCP server (Streamable HTTP) |
+| OpenAI-compatible function calling | — | NIM Chat Completions API called directly with `httpx` |
+
+### Backend
+
+| Technology | Version | Role |
+|---|---|---|
+| [Python](https://www.python.org) | 3.12 | API · agent · optimization |
+| [FastAPI](https://fastapi.tiangolo.com) + [Uvicorn](https://www.uvicorn.org) | 0.141 / 0.53 | REST API, SSE live events |
+| [Pydantic](https://docs.pydantic.dev) + pydantic-settings | 2.13 / 2.15 | Domain models, tool argument validation, settings |
+| [SQLAlchemy](https://www.sqlalchemy.org) + [psycopg](https://www.psycopg.org) | 2.0 / 3.3 | ORM, PostgreSQL driver |
+| [httpx](https://www.python-httpx.org) | 0.28 | Tool → service HTTP calls (with policy check) |
+| [PyYAML](https://pyyaml.org) | 6.0 | Optimization weights, OpenShell policy file |
+
+### Optimization
+
+| Technology | Version | Role |
+|---|---|---|
+| NVIDIA cuOpt | server REST | Primary MILP solver (GPU) |
+| [SciPy](https://scipy.org) (HiGHS) + [NumPy](https://numpy.org) | 1.18 / 2.5 | CPU fallback solver (same MILP), sparse matrices |
+
+### Frontend
+
+| Technology | Version | Role |
+|---|---|---|
+| [Next.js](https://nextjs.org) (App Router, standalone) | 15.5 | Operations dashboard, judge guide |
+| [React](https://react.dev) + [TypeScript](https://www.typescriptlang.org) | 19.1 / 5.9 | UI components, types |
+| [Tailwind CSS](https://tailwindcss.com) | 3.4 | Styling |
+| [lucide-react](https://lucide.dev) | 0.468 | Icons |
+| EventSource (SSE) | — | Live agent activity stream (falls back to polling) |
+
+### Data · infrastructure · deployment
+
+| Technology | Version | Role |
+|---|---|---|
+| [PostgreSQL](https://www.postgresql.org) | 16 | Operational database (tests use SQLite) |
+| [Docker](https://www.docker.com) + Docker Compose | `python:3.12-slim`, `node:22-alpine` | Service containers, local demo stack |
+| [uv](https://docs.astral.sh/uv/) | 0.5 | Python package installs |
+| [Terraform](https://www.terraform.io) + AWS provider | ≥ 1.6 / 5.x | AWS infrastructure as code |
+| AWS | — | VPC, ALB, EC2 GPU (g6) + Deep Learning AMI, RDS PostgreSQL, ECR, Secrets Manager, SSM, CloudWatch Logs |
+
+### Testing · quality · CI
+
+| Technology | Version | Role |
+|---|---|---|
+| [pytest](https://pytest.org) + pytest-asyncio | 9.1 | 91 backend tests |
+| [Ruff](https://docs.astral.sh/ruff/) | 0.16 | Lint · format |
+| [Playwright](https://playwright.dev) | — | Scripted browser walkthroughs, screenshots |
+| [mermaid-cli](https://github.com/mermaid-js/mermaid-cli) | 11 | Render-checks the doc diagrams |
+| [GitHub Actions](https://github.com/features/actions) | — | CI: tests, PostgreSQL smoke run, web build, `terraform validate`, Docker builds |
 
 ## Demo
 

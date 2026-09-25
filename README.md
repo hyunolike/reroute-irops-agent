@@ -4,6 +4,12 @@
 
 **ReRoute: Autonomous Airline Disruption Recovery Agent** · NVIDIA Korea Agentic AI Hackathon 출품작
 
+![NVIDIA Nemotron](https://img.shields.io/badge/NVIDIA%20Nemotron-NIM-76B900?logo=nvidia&logoColor=white) ![NeMo Retriever](https://img.shields.io/badge/NeMo%20Retriever-RAG-76B900?logo=nvidia&logoColor=white) ![NVIDIA cuOpt](https://img.shields.io/badge/NVIDIA%20cuOpt-MILP-76B900?logo=nvidia&logoColor=white) ![NVIDIA OpenShell](https://img.shields.io/badge/NVIDIA%20OpenShell-sandbox-76B900?logo=nvidia&logoColor=white) ![NemoClaw](https://img.shields.io/badge/NemoClaw-OpenClaw%20%C2%B7%20MCP-76B900?logo=nvidia&logoColor=white)<br/>
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi&logoColor=white) ![Pydantic](https://img.shields.io/badge/Pydantic-2.13-E92063?logo=pydantic&logoColor=white) ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-D71F00?logo=sqlalchemy&logoColor=white) ![SciPy](https://img.shields.io/badge/SciPy-HiGHS-8CAAE6?logo=scipy&logoColor=white) ![MCP SDK](https://img.shields.io/badge/MCP%20SDK-2.2-111111?logo=modelcontextprotocol&logoColor=white)<br/>
+![Next.js](https://img.shields.io/badge/Next.js-15.5-000000?logo=nextdotjs&logoColor=white) ![React](https://img.shields.io/badge/React-19.1-087EA4?logo=react&logoColor=white) ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white) ![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-3.4-06B6D4?logo=tailwindcss&logoColor=white)<br/>
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white) ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white) ![Terraform](https://img.shields.io/badge/Terraform-AWS-844FBA?logo=terraform&logoColor=white) ![AWS](https://img.shields.io/badge/AWS-EC2%20GPU%20%C2%B7%20RDS%20%C2%B7%20ALB-232F3E) ![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-CI-2088FF?logo=githubactions&logoColor=white)<br/>
+![pytest](https://img.shields.io/badge/pytest-91%20tests-0A9EDC?logo=pytest&logoColor=white) ![Ruff](https://img.shields.io/badge/Ruff-lint-D7FF64?logo=ruff&logoColor=black) ![Playwright](https://img.shields.io/badge/Playwright-E2E-2EAD33)
+
 > 운영자가 한 문장을 입력합니다 — *"KE123편이 결항됐어. 영향 승객을 확인하고 최적 재배정안을 만들어줘."*
 > ReRoute 에이전트가 스스로 계획을 세우고, 도구를 호출하고, 항공사 규정을 검색하고, NVIDIA cuOpt로 최적 재배정을 계산한 뒤,
 > **운영자 승인을 받아** 실제 예약을 변경하고 감사 로그를 남깁니다.
@@ -20,7 +26,7 @@
 |---|---|
 | 🎬 명령 한 줄로 데모 | `docker compose up --build` → http://localhost:3000 → **Run Agent** |
 | 📖 심사위원 3분 가이드 | http://localhost:3000/guide · [발표 대본 (영문)](docs/demo-scenario.md) |
-| 🤖 에이전트 구조와 동작 (그림 7종) | [docs/agent.md](docs/agent.md) · [English](docs/agent.en.md) |
+| 🤖 에이전트 구조와 동작 (그림 8종) | [docs/agent.md](docs/agent.md) · [English](docs/agent.en.md) |
 | 🧭 시스템 아키텍처 (Mermaid 다이어그램 7종) | [docs/architecture.md](docs/architecture.md) · [English](docs/architecture.en.md) |
 | 🟩 NVIDIA 연동 방식과 검증 수준 | [docs/nvidia-integration.md (영문)](docs/nvidia-integration.md) · [nvidia/](nvidia/) |
 | ☁️ AWS 배포 (Terraform) | [infra/terraform/README.md](infra/terraform/README.md) · [English](infra/terraform/README.en.md) · 아래 [AWS 배포](#aws-배포) 절 |
@@ -29,7 +35,7 @@
 
 ## 목차
 1. [문제](#문제) · 2. [해결책](#해결책) · 3. [왜 Agentic AI인가](#왜-agentic-ai인가) · 4. [왜 NVIDIA인가](#왜-nvidia인가)
-5. [아키텍처](#아키텍처) · [LLM 에이전트 동작 방식](#llm-에이전트-동작-방식) · [NemoClaw·OpenClaw 연동](#nemoclaw--openclaw-연동-mcp) · 6. [NVIDIA 스택과 실행 모드](#nvidia-스택과-실행-모드) · 7. [데모](#데모) · 8. [시작하기](#시작하기)
+5. [아키텍처](#아키텍처) · [LLM 에이전트 동작 방식](#llm-에이전트-동작-방식) · [NemoClaw·OpenClaw 연동](#nemoclaw--openclaw-연동-mcp) · 6. [NVIDIA 스택과 실행 모드](#nvidia-스택과-실행-모드) · [기술 스택](#기술-스택) · 7. [데모](#데모) · 8. [시작하기](#시작하기)
 9. [AWS 배포](#aws-배포) · 10. [보안](#보안) · 11. [최적화 모델](#최적화-모델) · 12. [화면](#화면) · 13. [향후 계획](#향후-계획)
 
 ---
@@ -191,6 +197,78 @@ REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://<도메인>/mcp            
 
 **정직성 원칙:** 대시보드 상단 표시등과 타임라인의 모든 배지는 **실제로 실행된 구현**을 보여줍니다. NVIDIA 서비스는 초록색,
 대체 구현은 주황색입니다. 대체 구현을 NVIDIA로 표시하는 일은 없으며, 자동 전환이 일어나면 `GUARDRAIL` 이벤트로 기록합니다.
+
+## 기술 스택
+
+표의 버전은 이 저장소에서 테스트한 버전입니다. `pyproject.toml`·`package.json`에는 최소 버전이 적혀 있습니다.
+"상태"는 이 저장소에서 실제로 어디까지 검증했는지를 뜻합니다(자세한 내용: [docs/nvidia-integration.md](docs/nvidia-integration.md)).
+
+### NVIDIA AI
+
+| 기술 | 버전 · 모델 | ReRoute에서의 역할 | 상태 |
+|---|---|---|---|
+| [Nemotron](https://build.nvidia.com) via **NIM** | `nvidia/nemotron-3-super-120b-a12b` (OpenAI 호환 Chat Completions, function calling) | 목표 해석, 계획, 다음 도구 선택, 운영자 브리핑 | 요청·응답 형식 테스트 완료. 실제 호출은 `NVIDIA_API_KEY` 설정 시 |
+| [NeMo Retriever](https://build.nvidia.com) | `llama-nemotron-embed-1b-v2` + `llama-nemotron-rerank-1b-v2` | 항공사 규정 검색 (임베딩 → 재순위화) | 구현 완료. 키가 없으면 BM25로 대체(화면에 표시) |
+| [cuOpt](https://github.com/NVIDIA/cuopt) | cuOpt server REST (`nvidia/cuopt:latest-cu12`) | 승객×항공편×좌석등급 MILP 최적 배정 | 요청 형식 테스트 + 요청 파일로 최적값 교차 검증. 실제 실행은 GPU 필요 |
+| [OpenShell](https://github.com/NVIDIA/OpenShell) | 정책 스키마 `version: 1` | 에이전트 샌드박스: 통신·파일·프로세스·자격증명 통제 | 정책 파일 검증 완료. 샌드박스 실행은 문서화 |
+| [NemoClaw](https://github.com/NVIDIA/NemoClaw) · OpenClaw | `nemoclaw <sandbox> mcp add` | OpenClaw가 MCP로 ReRoute 도구를 사용 | ReRoute MCP 서버 검증 완료. NemoClaw 연결은 문서화 |
+| [NVIDIA Skills](https://github.com/NVIDIA/skills) | `cuopt-numerical-optimization-formulation`, `cuopt-server-api-python`, `nemo-retriever` | 최적화 정식화·cuOpt API·RAG 구현의 기준 | 설계 참고 |
+
+### 에이전트 · AI
+
+| 기술 | 버전 | 역할 |
+|---|---|---|
+| 자체 에이전트 오케스트레이터 (Python) | — | 도구 호출 루프, 가드레일, 상태 머신, 이벤트 로그. 프레임워크(LangGraph 등) 없이 직접 구현 |
+| [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) (`mcp`) | 2.2 | ReRoute 도구를 MCP 서버(Streamable HTTP)로 공개 |
+| OpenAI 호환 function calling | — | NIM의 Chat Completions API를 `httpx`로 직접 호출 |
+
+### 백엔드
+
+| 기술 | 버전 | 역할 |
+|---|---|---|
+| [Python](https://www.python.org) | 3.12 | API · 에이전트 · 최적화 |
+| [FastAPI](https://fastapi.tiangolo.com) + [Uvicorn](https://www.uvicorn.org) | 0.141 / 0.53 | REST API, SSE 실시간 이벤트 |
+| [Pydantic](https://docs.pydantic.dev) + pydantic-settings | 2.13 / 2.15 | 도메인 모델, 도구 인자 검증, 환경 설정 |
+| [SQLAlchemy](https://www.sqlalchemy.org) + [psycopg](https://www.psycopg.org) | 2.0 / 3.3 | ORM, PostgreSQL 드라이버 |
+| [httpx](https://www.python-httpx.org) | 0.28 | 도구 → 서비스 HTTP 호출 (정책 검사 포함) |
+| [PyYAML](https://pyyaml.org) | 6.0 | 최적화 가중치, OpenShell 정책 파일 |
+
+### 최적화
+
+| 기술 | 버전 | 역할 |
+|---|---|---|
+| NVIDIA cuOpt | server REST | 기본 MILP solver (GPU) |
+| [SciPy](https://scipy.org) (HiGHS) + [NumPy](https://numpy.org) | 1.18 / 2.5 | CPU 대체 solver (같은 MILP), 희소 행렬 |
+
+### 프론트엔드
+
+| 기술 | 버전 | 역할 |
+|---|---|---|
+| [Next.js](https://nextjs.org) (App Router, standalone) | 15.5 | 운영 대시보드, 심사위원 가이드 |
+| [React](https://react.dev) + [TypeScript](https://www.typescriptlang.org) | 19.1 / 5.9 | UI 컴포넌트, 타입 |
+| [Tailwind CSS](https://tailwindcss.com) | 3.4 | 스타일 |
+| [lucide-react](https://lucide.dev) | 0.468 | 아이콘 |
+| EventSource (SSE) | — | 에이전트 활동 실시간 스트림 (실패 시 폴링) |
+
+### 데이터 · 인프라 · 배포
+
+| 기술 | 버전 | 역할 |
+|---|---|---|
+| [PostgreSQL](https://www.postgresql.org) | 16 | 운영 DB (테스트는 SQLite) |
+| [Docker](https://www.docker.com) + Docker Compose | `python:3.12-slim`, `node:22-alpine` | 서비스 컨테이너, 로컬 데모 스택 |
+| [uv](https://docs.astral.sh/uv/) | 0.5 | Python 패키지 설치 |
+| [Terraform](https://www.terraform.io) + AWS provider | ≥ 1.6 / 5.x | AWS 인프라 코드 |
+| AWS | — | VPC, ALB, EC2 GPU(g6) + Deep Learning AMI, RDS PostgreSQL, ECR, Secrets Manager, SSM, CloudWatch Logs |
+
+### 테스트 · 품질 · CI
+
+| 기술 | 버전 | 역할 |
+|---|---|---|
+| [pytest](https://pytest.org) + pytest-asyncio | 9.1 | 백엔드 테스트 91개 |
+| [Ruff](https://docs.astral.sh/ruff/) | 0.16 | 린트 · 포맷 |
+| [Playwright](https://playwright.dev) | — | 브라우저 시연 자동화, 화면 캡처 |
+| [mermaid-cli](https://github.com/mermaid-js/mermaid-cli) | 11 | 문서 다이어그램 렌더링 검증 |
+| [GitHub Actions](https://github.com/features/actions) | — | CI: 테스트, PostgreSQL 자동 점검, 웹 빌드, `terraform validate`, Docker 빌드 |
 
 ## 데모
 
