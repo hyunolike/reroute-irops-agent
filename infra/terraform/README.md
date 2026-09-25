@@ -142,7 +142,8 @@ terraform output url
 
 | 작업 | 명령 |
 |---|---|
-| 새 이미지 반영 | `make push` 후 `make redeploy` (SSM으로 호스트에서 `docker compose pull && up -d`) |
+| 새 이미지 반영 | `develop`에 push하면 GitHub Actions가 자동 배포 (아래 절). 로컬에서는 `make push TAG=<태그>` 후 `make deploy TAG=<태그>` |
+| 롤백 | 이전 태그로 다시 배포: `make deploy TAG=<이전 태그>` 또는 Actions의 **deploy** 워크플로를 수동 실행하며 `image_tag` 입력 |
 | 서버 셸 접속 | `aws ssm start-session --target $(terraform output -raw instance_id)` |
 | 부팅 로그 확인 | 접속 후 `sudo cat /var/log/reroute-bootstrap.log` |
 | 컨테이너 상태 | 접속 후 `cd /opt/reroute && sudo docker compose ps` |
@@ -150,11 +151,54 @@ terraform output url
 | NVIDIA 키 변경 반영 | 키를 바꾼 뒤 인스턴스 재생성: `terraform apply -replace=aws_instance.app` |
 | 전체 삭제 | `terraform destroy` |
 
+### GitHub Actions 자동 배포
+
+`develop`에 push하면 `.github/workflows/deploy.yml`이 아래 순서로 실행됩니다. AWS 액세스 키는 GitHub에 저장하지 않습니다.
+GitHub OIDC 토큰으로 배포 전용 IAM 역할을 받고, 이 역할은 이 저장소의 `demo` environment에서 도는 작업만 받을 수 있습니다.
+
+```mermaid
+flowchart LR
+    p["develop push"] --> ci["CI<br/>테스트 · 린트 · 이미지 빌드 확인"]
+    ci --> b["이미지 빌드 → ECR<br/>태그: 커밋 SHA 12자리 + latest"]
+    b --> d["infra/deploy/deploy.sh<br/>SSM으로 호스트 compose 태그 교체<br/>pull · up -d"]
+    d --> h["헬스체크<br/>호스트 :8000 · :3000 → ALB /api/health"]
+```
+
+배포 전용 역할은 ECR 저장소 두 개에 이미지를 올리는 것과, `Name=<name>-<environment>-app` 태그가 붙은 인스턴스에
+`AWS-RunShellScript`를 실행하는 것만 할 수 있습니다. 인프라 변경(`terraform apply`)은 자동화하지 않고 지금처럼 사람이 실행합니다.
+
+**처음 한 번 설정**
+
+```bash
+# 1) terraform.tfvars에 저장소 지정 후 apply → 배포 역할 생성
+#    github_repository = "hyunolike/reroute-irops-agent"
+#    (계정에 GitHub OIDC 공급자가 이미 있으면 create_github_oidc_provider = false)
+terraform apply
+terraform output github_actions_variables     # 아래 2)에 넣을 값
+
+# 2) GitHub에 값 등록 (gh CLI, 저장소 루트에서)
+gh api -X PUT "repos/{owner}/{repo}/environments/demo"           # environment 생성
+gh variable set AWS_DEPLOY_ROLE_ARN --env demo --body "arn:aws:iam::<계정>:role/reroute-demo-github-deploy"
+gh variable set AWS_REGION          --env demo --body ap-northeast-2
+gh variable set DEPLOY_NAME         --env demo --body reroute
+gh variable set DEPLOY_ENVIRONMENT  --env demo --body demo
+gh variable set DEPLOY_ENABLED --body true                          # 저장소 변수. 이게 없으면 develop push에 CI만 돕니다
+```
+
+값은 모두 비밀값이 아닌 변수(variable)입니다. 저장하는 비밀값(secret)은 없습니다. GitHub의 **Settings → Environments → demo**에서
+배포 브랜치를 `develop`으로 제한하거나 승인자를 지정하면, 수동 실행을 포함한 모든 배포에 그 규칙이 걸립니다.
+
+**수동 실행과 롤백:** Actions 탭에서 **deploy** → **Run workflow**. `image_tag`를 비우면 선택한 브랜치의 커밋을 빌드해 배포하고,
+이전 태그(ECR에 남아 있는 커밋 SHA, 최근 15개 보관)를 넣으면 빌드 없이 그 이미지로 되돌립니다. 호스트에서 배포가 실패하면
+직전 compose 파일이 `/opt/reroute/docker-compose.yml.prev`에 남습니다.
+
 ## 7. 문제 해결
 
 | 증상 | 원인과 조치 |
 |---|---|
 | `apply` 중 `InsufficientInstanceCapacity` / `VcpuLimitExceeded` | GPU 할당량 부족 또는 해당 가용영역에 재고 없음 → 할당량 증가 요청, `g5.xlarge`로 변경, 또는 `enable_gpu = false` |
+| Actions `Could not assume role` / `Not authorized to perform sts:AssumeRoleWithWebIdentity` | 작업이 `demo` environment에서 돌지 않았거나 `github_repository` 값이 저장소 이름과 다름 → tfvars 확인 후 `terraform apply` |
+| 배포가 `SSM command ... ended with status Failed` | 출력된 호스트 로그 확인. 흔한 원인은 이미지 pull 실패나 헬스체크 시간 초과. 이전 태그로 롤백 가능 |
 | ALB 502 / 대상 unhealthy | 이미지 pull이 아직 진행 중이거나 ECR에 `image_tag` 이미지가 없음 → 부팅 로그 확인, `make push` 재실행 |
 | 상단 표시등이 모두 주황색 | NVIDIA 키가 비어 있는 상태로 부팅됨 → 키 등록 후 `terraform apply -replace=aws_instance.app` |
 | Optimizer가 "CPU fallback"으로 표시 | cuOpt 컨테이너가 아직 준비되지 않았거나 GPU를 인식하지 못함 → `docker compose logs cuopt`, `nvidia-smi` 확인 |
@@ -175,7 +219,9 @@ terraform output url
 | `iam.tf` | 인스턴스 역할(최소 권한), CloudWatch 로그 그룹 |
 | `templates/user_data.sh.tftpl` | 부팅 스크립트 (비밀값 없음) |
 | `templates/docker-compose.prod.yml.tftpl` | 운영용 compose (GPU일 때만 cuOpt 포함) |
-| `outputs.tf` | 접속 URL, ECR 주소, 인스턴스 ID, NVIDIA 키 시크릿 ARN |
+| `github_oidc.tf` | GitHub Actions용 OIDC 공급자와 배포 전용 역할 (`github_repository`를 지정했을 때만 생성) |
+| `outputs.tf` | 접속 URL, ECR 주소, 인스턴스 ID, NVIDIA 키 시크릿 ARN, GitHub Actions 변수 |
+| `../deploy/deploy.sh` | AWS CLI만으로 호스트를 지정한 이미지 태그로 교체하고 헬스체크 (Actions와 `make deploy`가 함께 사용) |
 
 ## 9. 운영 환경으로 확장할 때
 

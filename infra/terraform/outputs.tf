@@ -34,3 +34,13 @@ output "mcp_token_command" {
 output "optimizer" {
   value = var.enable_gpu ? "NVIDIA cuOpt on ${var.gpu_instance_type}" : "CPU fallback (enable_gpu=false)"
 }
+
+output "github_actions_variables" {
+  description = "Set these as GitHub environment variables (Settings > Environments > <github_environment>) for deploy.yml"
+  value = local.github_deploy ? {
+    AWS_DEPLOY_ROLE_ARN = aws_iam_role.github_deploy[0].arn
+    AWS_REGION          = var.region
+    DEPLOY_NAME         = var.name
+    DEPLOY_ENVIRONMENT  = var.environment
+  } : null
+}

@@ -110,3 +110,21 @@ variable "allowed_ingress_cidrs" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }
+
+variable "github_repository" {
+  description = "owner/repo allowed to deploy through GitHub Actions OIDC (e.g. hyunolike/reroute-irops-agent). Empty = no deploy role."
+  type        = string
+  default     = ""
+}
+
+variable "github_environment" {
+  description = "GitHub environment the deploy job runs in; only jobs in this environment can assume the deploy role."
+  type        = string
+  default     = "demo"
+}
+
+variable "create_github_oidc_provider" {
+  description = "Create the GitHub OIDC provider. Set false if the AWS account already has token.actions.githubusercontent.com."
+  type        = bool
+  default     = true
+}

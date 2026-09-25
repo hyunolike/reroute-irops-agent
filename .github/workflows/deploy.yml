@@ -1,0 +1,102 @@
+name: deploy
+
+# develop push -> CI -> build & push images (tag = commit SHA, plus latest) -> roll the AWS host via SSM.
+# Manual run: deploy the current commit, or redeploy an existing tag (rollback) without building.
+# Setup (once): infra/terraform/README.md "GitHub Actions 자동 배포". Until the repository variable
+# DEPLOY_ENABLED=true is set, a develop push only runs CI.
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Existing image tag to deploy (rollback). Empty = build and deploy this commit."
+        required: false
+        default: ""
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    if: inputs.image_tag == ''
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    needs: ci
+    if: inputs.image_tag == '' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: demo # must match github_environment in Terraform (the OIDC role trusts only this environment)
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Check deploy configuration
+        if: vars.AWS_DEPLOY_ROLE_ARN == ''
+        run: |
+          echo "::error::AWS_DEPLOY_ROLE_ARN is not set for this GitHub environment - see infra/terraform/README.md"
+          exit 1
+      - uses: actions/checkout@v4
+      - id: tag
+        run: echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push reroute-api
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ vars.DEPLOY_NAME || 'reroute' }}/reroute-api:${{ steps.tag.outputs.tag }}
+            ${{ steps.ecr.outputs.registry }}/${{ vars.DEPLOY_NAME || 'reroute' }}/reroute-api:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+      - name: Build and push reroute-web
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/web
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          build-args: API_INTERNAL_URL=http://reroute-api:8000
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ vars.DEPLOY_NAME || 'reroute' }}/reroute-web:${{ steps.tag.outputs.tag }}
+            ${{ steps.ecr.outputs.registry }}/${{ vars.DEPLOY_NAME || 'reroute' }}/reroute-web:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+  deploy:
+    needs: build
+    # runs after a build, or on its own for a manual rollback (build skipped)
+    if: always() && vars.DEPLOY_ENABLED == 'true' && (needs.build.result == 'success' || (needs.build.result == 'skipped' && inputs.image_tag != ''))
+    runs-on: ubuntu-latest
+    environment: demo # must match github_environment in Terraform (the OIDC role trusts only this environment)
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      - name: Roll the app host
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag || needs.build.outputs.image_tag }}
+          NAME: ${{ vars.DEPLOY_NAME || 'reroute' }}
+          ENVIRONMENT: ${{ vars.DEPLOY_ENVIRONMENT || 'demo' }}
+        run: infra/deploy/deploy.sh
