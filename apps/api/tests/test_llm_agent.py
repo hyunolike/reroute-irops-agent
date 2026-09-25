@@ -76,6 +76,28 @@ async def test_nim_retries_transient_errors(container):
     assert len(calls) == 3
 
 
+async def test_nim_backoff_honours_retry_after_and_cap(container, monkeypatch):
+    sleeps = []
+
+    async def fake_sleep(s):
+        sleeps.append(s)
+
+    monkeypatch.setattr("app.providers.llm.nim.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("app.providers.llm.nim.random.uniform", lambda a, b: 1.0)
+    responses = iter(
+        [
+            httpx.Response(429, headers={"Retry-After": "5"}, text="slow down"),
+            httpx.Response(500, text="boom"),
+            httpx.Response(429, headers={"Retry-After": "120"}, text="slow down"),
+            httpx.Response(200, json={"model": "m", "choices": [{"message": {"content": "ok"}}]}),
+        ]
+    )
+    container.http.external_transport = httpx.MockTransport(lambda req: next(responses))
+    nim = NvidiaNimProvider(container.http, "k", "https://integrate.api.nvidia.com/v1", "nvidia/nemotron-3-super-120b-a12b")
+    assert (await nim.chat([{"role": "user", "content": "hi"}])).content == "ok"
+    assert sleeps == [5.0, 2.0, 8.0]  # Retry-After, then the exponential schedule, capped at retry_max_delay
+
+
 async def test_nim_text_tool_call_end_to_end(container):
     def handler(req):
         return httpx.Response(

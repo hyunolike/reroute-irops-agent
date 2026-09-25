@@ -168,6 +168,7 @@ async def test_agent_falls_back_when_nim_fails(tmp_path):
     app, c = build_app(make_settings(tmp_path))
     c.http.external_transport = httpx.MockTransport(lambda req: httpx.Response(503, text="unavailable"))
     nim = NvidiaNimProvider(c.http, "k", "https://integrate.api.nvidia.com/v1", "nvidia/nemotron-3-super-120b-a12b")
+    nim.retry_base_delay = 0
     c.orchestrator.llm = nim
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as client:
         task = await run_agent_to_approval(client, c)

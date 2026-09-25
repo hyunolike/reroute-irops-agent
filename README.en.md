@@ -147,11 +147,13 @@ With the default `LLM_PROVIDER=auto` and an NVIDIA key, **Nemotron chooses the n
 | Robustness | Text-form tool calls (`<TOOLCALL>` …) are parsed, `<think>` separated, 429/5xx retried. Only if it still cannot finish does the scripted planner take over — and that is logged |
 | Decision boundary | The model cannot change the allocation (the solver decides) and cannot change bookings without approval |
 
-Real-model evaluation: `NVIDIA_API_KEY=nvapi-... make eval-llm` runs 4 scenarios (cancellation KO/EN, delay, unknown flight) on Nemotron and
+Real-model evaluation: `make eval-llm` (reads `NVIDIA_API_KEY` from the repo-root `.env`) runs 4 scenarios (cancellation KO/EN, delay, unknown flight) on Nemotron and
 scores final state, tools used, guidance interventions, fallback, and solver result.
 
-> Status: no run against real Nemotron yet (this dev environment has no key and its network blocks the NVIDIA endpoint). Tests with
-> fake models that behave imperfectly (one tool per turn, wrong order, wrong argument shape, stopping early) verify the agent still completes.
+> Result (2026-09-25, `nvidia/nemotron-3-super-120b-a12b` on build.nvidia.com): **4/4 in three consecutive runs**, zero planner fallbacks.
+> The hosted endpoint returned 13–21 transient 429/500/503 responses per run; retries (up to 4, honouring `Retry-After`) absorbed all of them.
+> With only 2 retries, 1–2 scenarios per run fell back to the scripted planner. Wrong tool order from the model was corrected by the guardrails.
+> Tests with fake models that behave imperfectly (one tool per turn, wrong order, wrong argument shape, stopping early) also cover this.
 
 ## NemoClaw · OpenClaw integration (MCP)
 

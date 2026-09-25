@@ -7,6 +7,9 @@ Runs every scenario end-to-end in-process (temporary SQLite DB, real HTTP semant
 by the normal settings (LLM_PROVIDER=auto -> Nemotron when a key is present) and checks agentic behaviour:
 final state, tools used, whether the model needed guidance or was replaced by the fallback planner, and that the
 allocation still came from the solver.
+
+The key and model settings are also read from the repo-root .env (the file docker compose uses), so
+`make eval-llm` works after the one-time .env setup; variables already set in the shell take precedence.
 """
 
 from __future__ import annotations
@@ -14,6 +17,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 import tempfile
 import time
@@ -23,8 +27,9 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from dotenv import dotenv_values
 
-from app.config import Settings
+from app.config import _DEFAULT_ROOT, Settings
 from app.main import create_app
 from app.seed.loader import seed_database
 
@@ -129,6 +134,19 @@ async def run_scenario(sc: Scenario, workdir: Path, base: dict[str, Any]) -> dic
     }
 
 
+# Only the reasoning-model settings: the rest of .env (AGENT_EXECUTION, SECURITY_RUNTIME, ...) describes the
+# deployed stack, not this in-process run.
+_LLM_ENV = ("NVIDIA_API_KEY", "LLM_PROVIDER", "NIM_")
+
+
+def load_llm_env(path: Path) -> None:
+    if not path.is_file():
+        return
+    for k, v in dotenv_values(path).items():
+        if v and k.startswith(_LLM_ENV):
+            os.environ.setdefault(k, v)
+
+
 async def main_async(as_json: bool) -> int:
     base = {}  # everything else (NVIDIA_API_KEY, LLM_PROVIDER, NIM_MODEL, ...) comes from the environment
     with tempfile.TemporaryDirectory() as tmp:
@@ -158,6 +176,7 @@ async def main_async(as_json: bool) -> int:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--json", action="store_true")
+    load_llm_env(_DEFAULT_ROOT / ".env")
     sys.exit(asyncio.run(main_async(ap.parse_args().json)))
 
 

@@ -53,7 +53,7 @@ dev-api: ## Run API locally (needs PostgreSQL or DATABASE_URL=sqlite:///./rerout
 dev-web: ## Run web locally (proxies /api to :8000)
 	cd $(WEB) && npm run dev
 
-eval-llm: ## Score the agent on 4 scenarios with the configured LLM (set NVIDIA_API_KEY for Nemotron)
+eval-llm: ## Score the agent on 4 scenarios with the configured LLM (NVIDIA_API_KEY from the shell or root .env)
 	cd $(API) && .venv/bin/python -m app.agent.evaluate
 
 mcp-smoke: ## Exercise an MCP endpoint like an external agent: REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://host/mcp

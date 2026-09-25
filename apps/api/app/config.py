@@ -57,7 +57,8 @@ class Settings(BaseSettings):
     nim_enable_thinking: bool = False
     nim_timeout_seconds: float = 60.0
     nim_temperature: float = 0.0
-    nim_max_retries: int = 2
+    # Hosted build.nvidia.com returns bursts of 429/5xx; 4 retries ≈ 15s of backoff before the planner fallback
+    nim_max_retries: int = 4
     # Maximum planner turns per task (a real model may call tools one at a time)
     agent_max_steps: int = 30
 
