@@ -2,8 +2,10 @@ name: ci
 
 on:
   push:
-    branches: [main, develop, "claude/**"]
+    # develop is covered by deploy.yml, which runs this workflow before deploying
+    branches: [main, "claude/**"]
   pull_request:
+  workflow_call:
 
 jobs:
   api:

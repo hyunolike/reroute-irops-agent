@@ -6,7 +6,7 @@ AWS_REGION ?= ap-northeast-2
 TAG ?= latest
 TF := infra/terraform
 
-.PHONY: mcp-smoke eval-llm help up up-gpu up-worker down logs reset smoke test lint fmt dev-api dev-web install export-cuopt push redeploy tf-validate sandbox probes
+.PHONY: mcp-smoke eval-llm help up up-gpu up-worker down logs reset smoke test lint fmt dev-api dev-web install export-cuopt push deploy redeploy tf-validate sandbox probes
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[32m%-14s\033[0m %s\n", $$1, $$2}'
@@ -53,7 +53,7 @@ dev-api: ## Run API locally (needs PostgreSQL or DATABASE_URL=sqlite:///./rerout
 dev-web: ## Run web locally (proxies /api to :8000)
 	cd $(WEB) && npm run dev
 
-eval-llm: ## Score the agent on 4 scenarios with the configured LLM (set NVIDIA_API_KEY for Nemotron)
+eval-llm: ## Score the agent on 4 scenarios with the configured LLM (NVIDIA_API_KEY from the shell or root .env)
 	cd $(API) && .venv/bin/python -m app.agent.evaluate
 
 mcp-smoke: ## Exercise an MCP endpoint like an external agent: REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://host/mcp
@@ -76,10 +76,10 @@ push: ## Build and push images to ECR (after `terraform apply -target=aws_ecr_re
 	docker build --platform linux/amd64 --build-arg API_INTERNAL_URL=http://reroute-api:8000 -t $(WEB_REPO):$(TAG) $(WEB)
 	docker push $(API_REPO):$(TAG) && docker push $(WEB_REPO):$(TAG)
 
-redeploy: ## Pull new images on the AWS host via SSM
-	aws ssm send-command --region $(AWS_REGION) --document-name AWS-RunShellScript \
-	  --targets Key=InstanceIds,Values=$$(cd $(TF) && terraform output -raw instance_id) \
-	  --parameters 'commands=["cd /opt/reroute && aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $$(grep -o \"[0-9]*\\.dkr\\.ecr[^/]*\" docker-compose.yml | head -1) && docker compose pull && docker compose up -d"]'
+deploy: ## Roll the AWS host to TAG via SSM + health check (TAG must be in ECR; an older TAG = rollback)
+	IMAGE_TAG=$(TAG) AWS_REGION=$(AWS_REGION) infra/deploy/deploy.sh
+
+redeploy: deploy ## Alias of deploy (kept for older docs)
 
 tf-validate: ## terraform fmt + validate
 	cd $(TF) && terraform fmt -check -recursive && terraform init -backend=false -input=false >/dev/null && terraform validate

@@ -7,7 +7,8 @@ Reasoning toggle: Nemotron 3 models use `chat_template_kwargs.enable_thinking`;
 Llama-3.3-Nemotron-Super-49B-v1.5 / Nemotron-Nano-9B-v2 use a "/think" | "/no_think" system prompt tag.
 
 Robustness for real model output:
-- transient 429 / 5xx / network errors are retried with backoff
+- transient 429 / 5xx / network errors are retried with capped, jittered exponential backoff; a numeric
+  `Retry-After` header (the hosted endpoint sends one with 429) is honoured up to the cap
 - tool calls emitted as text (`<TOOLCALL>[...]</TOOLCALL>`, `<tool_call>{...}</tool_call>` or a bare JSON
   object) are parsed when the server did not return structured `tool_calls`
 - `<think>...</think>` blocks are separated from the visible content
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import random
 import re
 import time
 from typing import Any
@@ -32,6 +34,13 @@ _TEXT_CALLS = [
     re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.S),
 ]
 _RETRY_STATUS = {408, 409, 425, 429, 500, 502, 503, 504}
+
+
+def _retry_after(r: httpx.Response) -> float:
+    try:
+        return max(0.0, float(r.headers.get("retry-after", 0)))
+    except ValueError:  # HTTP-date form: fall back to our own schedule
+        return 0.0
 
 
 def split_thinking(content: str | None) -> tuple[str | None, str | None]:
@@ -109,7 +118,7 @@ class NvidiaNimProvider(LLMProvider):
         *,
         temperature: float = 0.0,
         enable_thinking: bool = False,
-        max_retries: int = 2,
+        max_retries: int = 4,
     ) -> None:
         if not api_key:
             raise LLMError("NVIDIA_API_KEY is required for LLM_PROVIDER=nvidia")
@@ -121,6 +130,7 @@ class NvidiaNimProvider(LLMProvider):
         self.enable_thinking = enable_thinking
         self.max_retries = max_retries
         self.retry_base_delay = 1.0
+        self.retry_max_delay = 8.0
 
     def _prepare(self, messages: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         extra: dict[str, Any] = {}
@@ -150,8 +160,10 @@ class NvidiaNimProvider(LLMProvider):
             else:
                 if r.status_code not in _RETRY_STATUS or attempt == self.max_retries:
                     return r
-            await asyncio.sleep(delay)
-            delay *= 2
+                delay = max(delay, _retry_after(r))
+            # jitter spreads retries from concurrent tasks instead of hitting the rate limit in lockstep
+            await asyncio.sleep(min(delay, self.retry_max_delay) * random.uniform(0.5, 1.0))
+            delay = self.retry_base_delay * 2 ** (attempt + 1)
         raise LLMError("unreachable")  # pragma: no cover
 
     async def chat(

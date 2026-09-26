@@ -146,11 +146,13 @@ OPTIMIZING → GENERATING_PROPOSAL → WAITING_APPROVAL → EXECUTING → COMPLE
 | 견고성 | 텍스트로 온 도구 호출(`<TOOLCALL>` 등) 파싱, `<think>` 분리, 429/5xx 재시도. 끝까지 진행이 안 될 때만 스크립트 플래너가 이어받고 그 사실을 기록합니다 |
 | 결정 경계 | 모델은 배정을 바꿀 수 없고(solver가 결정), 예약 변경은 승인 없이 불가능합니다 |
 
-실제 모델 평가: `NVIDIA_API_KEY=nvapi-... make eval-llm` → 시나리오 4개(결항 국문/영문, 지연, 없는 편)를 Nemotron으로 실행하고,
+실제 모델 평가: `make eval-llm` (루트 `.env`의 `NVIDIA_API_KEY`를 읽음) → 시나리오 4개(결항 국문/영문, 지연, 없는 편)를 Nemotron으로 실행하고,
 최종 상태 · 사용 도구 · 안내 개입 횟수 · 스크립트 플래너 전환 여부 · solver 결과를 채점합니다.
 
-> 현재 상태: 실제 Nemotron으로 실행한 결과는 아직 없습니다(이 개발 환경에는 키가 없고 NVIDIA 엔드포인트 접속도 막혀 있음).
-> 실제 모델의 불완전한 행동(도구 하나씩 호출, 순서 오류, 인자 형식 오류, 중간 멈춤)을 흉내 낸 테스트로 끝까지 완료되는 것은 검증했습니다.
+> 실행 결과 (2026-09-25, build.nvidia.com의 `nvidia/nemotron-3-super-120b-a12b`): 연속 3회 모두 **4/4 통과**, 스크립트 플래너 전환 0회.
+> 무료 엔드포인트는 실행마다 429/500/503을 13~21회 돌려주는데, 재시도(최대 4회, `Retry-After` 반영)가 모두 흡수했습니다.
+> 재시도가 2회였을 때는 실행마다 1~2개 시나리오가 스크립트 플래너로 넘어갔습니다. 모델이 도구 순서를 틀린 경우는 가드레일이 되돌려 고쳤습니다.
+> 실제 모델의 불완전한 행동(도구 하나씩 호출, 순서 오류, 인자 형식 오류, 중간 멈춤)은 가짜 모델 테스트로도 검증합니다.
 
 ## NemoClaw · OpenClaw 연동 (MCP)
 
@@ -185,7 +187,7 @@ REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://<도메인>/mcp            
 | 환경 변수 | 실제 NVIDIA 모드 | 데모 / 대체(Fallback) 모드 |
 |---|---|---|
 | `LLM_PROVIDER` | `auto`(기본) / `nvidia` → NIM의 Nemotron (기본 `nvidia/nemotron-3-super-120b-a12b`) | 키가 없을 때만 → 스크립트 플래너 (도구·가드레일은 동일, 화면에 경고 표시) |
-| `RETRIEVER_PROVIDER` | `nvidia` → `llama-nemotron-embed-1b-v2` + `llama-nemotron-rerank-1b-v2` | `lexical` → 같은 문서에 대한 BM25 검색 |
+| `RETRIEVER_PROVIDER` | `nvidia` → `nemotron-3-embed-1b` + `llama-nemotron-rerank-vl-1b-v2` | `lexical` → 같은 문서에 대한 BM25 검색 |
 | `OPTIMIZATION_PROVIDER` | `cuopt` → cuOpt 서버 (GPU) | `fallback` → HiGHS (CPU), **같은** MILP 객체 |
 | `SECURITY_RUNTIME` | `openshell` → OpenShell 샌드박스 안의 에이전트 worker | `policy-mirror` → 같은 정책 YAML을 프로세스 안에서 평가 |
 

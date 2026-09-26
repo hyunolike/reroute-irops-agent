@@ -33,8 +33,9 @@ variable "gpu_instance_type" {
 }
 
 variable "cpu_instance_type" {
-  type    = string
-  default = "t3.large"
+  description = "CPU app host (enable_gpu=false). AWS Free-plan accounts can only launch free-tier types, e.g. m7i-flex.large."
+  type        = string
+  default     = "t3.large"
 }
 
 variable "root_volume_gb" {
@@ -45,6 +46,12 @@ variable "root_volume_gb" {
 variable "db_instance_class" {
   type    = string
   default = "db.t4g.micro"
+}
+
+variable "db_backup_retention_days" {
+  description = "RDS automated backup retention. AWS Free-plan accounts reject values above their limit (use 1)."
+  type        = number
+  default     = 3
 }
 
 variable "image_tag" {
@@ -109,4 +116,22 @@ variable "allowed_ingress_cidrs" {
   description = "Who may reach the ALB. Restrict to your judges/office IPs for a private demo."
   type        = list(string)
   default     = ["0.0.0.0/0"]
+}
+
+variable "github_repository" {
+  description = "owner/repo allowed to deploy through GitHub Actions OIDC (e.g. hyunolike/reroute-irops-agent). Empty = no deploy role."
+  type        = string
+  default     = ""
+}
+
+variable "github_environment" {
+  description = "GitHub environment the deploy job runs in; only jobs in this environment can assume the deploy role."
+  type        = string
+  default     = "demo"
+}
+
+variable "create_github_oidc_provider" {
+  description = "Create the GitHub OIDC provider. Set false if the AWS account already has token.actions.githubusercontent.com."
+  type        = bool
+  default     = true
 }

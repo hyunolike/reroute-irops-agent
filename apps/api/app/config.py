@@ -57,16 +57,18 @@ class Settings(BaseSettings):
     nim_enable_thinking: bool = False
     nim_timeout_seconds: float = 60.0
     nim_temperature: float = 0.0
-    nim_max_retries: int = 2
+    # Hosted build.nvidia.com returns bursts of 429/5xx; 4 retries ≈ 15s of backoff before the planner fallback
+    nim_max_retries: int = 4
     # Maximum planner turns per task (a real model may call tools one at a time)
     agent_max_steps: int = 30
 
     # --- Retrieval: NeMo Retriever NIMs or local lexical index ---
     retriever_provider: Literal["nvidia", "lexical"] = "lexical"
-    nim_embedding_model: str = "nvidia/llama-nemotron-embed-1b-v2"
+    # llama-nemotron-embed-1b-v2 / rerank-1b-v2 were retired on build.nvidia.com on 2026-08-25 (HTTP 410)
+    nim_embedding_model: str = "nvidia/nemotron-3-embed-1b"
     nim_embedding_url: str = "https://integrate.api.nvidia.com/v1/embeddings"
-    nim_rerank_model: str = "nvidia/llama-nemotron-rerank-1b-v2"
-    nim_rerank_url: str = "https://ai.api.nvidia.com/v1/retrieval/nvidia/llama-nemotron-rerank-1b-v2/reranking"
+    nim_rerank_model: str = "nvidia/llama-nemotron-rerank-vl-1b-v2"
+    nim_rerank_url: str = "https://ai.api.nvidia.com/v1/retrieval/nvidia/llama-nemotron-rerank-vl-1b-v2/reranking"
 
     # --- Optimization: NVIDIA cuOpt server or CPU fallback (HiGHS via SciPy) ---
     optimization_provider: Literal["cuopt", "fallback"] = "fallback"

@@ -142,7 +142,8 @@ The first boot can take a few minutes (the cuOpt image is large). Wait until the
 
 | Task | Command |
 |---|---|
-| Roll out new images | `make push`, then `make redeploy` (SSM runs `docker compose pull && up -d` on the host) |
+| Roll out new images | push to `develop` and GitHub Actions deploys (see below). Locally: `make push TAG=<tag>`, then `make deploy TAG=<tag>` |
+| Roll back | deploy an older tag: `make deploy TAG=<older tag>`, or run the **deploy** workflow manually with `image_tag` |
 | Shell on the host | `aws ssm start-session --target $(terraform output -raw instance_id)` |
 | Bootstrap log | on the host: `sudo cat /var/log/reroute-bootstrap.log` |
 | Container status | on the host: `cd /opt/reroute && sudo docker compose ps` |
@@ -150,11 +151,54 @@ The first boot can take a few minutes (the cuOpt image is large). Wait until the
 | Apply a changed NVIDIA key | recreate the host: `terraform apply -replace=aws_instance.app` |
 | Tear down | `terraform destroy` |
 
+### GitHub Actions deployment
+
+A push to `develop` runs `.github/workflows/deploy.yml`. No AWS keys are stored in GitHub: the job exchanges its GitHub OIDC token
+for a deploy-only IAM role that trusts only jobs running in this repository's `demo` environment.
+
+```mermaid
+flowchart LR
+    p["develop push"] --> ci["CI<br/>tests · lint · image build check"]
+    ci --> b["build images → ECR<br/>tags: 12-char commit SHA + latest"]
+    b --> d["infra/deploy/deploy.sh<br/>SSM: rewrite compose tags on the host<br/>pull · up -d"]
+    d --> h["health check<br/>host :8000 · :3000 → ALB /api/health"]
+```
+
+The deploy role can push to the two ECR repositories and run `AWS-RunShellScript` on instances tagged
+`Name=<name>-<environment>-app` — nothing else. Infrastructure changes (`terraform apply`) stay manual.
+
+**One-time setup**
+
+```bash
+# 1) name the repository in terraform.tfvars and apply -> creates the deploy role
+#    github_repository = "hyunolike/reroute-irops-agent"
+#    (create_github_oidc_provider = false if the account already has the GitHub OIDC provider)
+terraform apply
+terraform output github_actions_variables     # values for step 2
+
+# 2) register them in GitHub (gh CLI, from the repo root)
+gh api -X PUT "repos/{owner}/{repo}/environments/demo"           # create the environment
+gh variable set AWS_DEPLOY_ROLE_ARN --env demo --body "arn:aws:iam::<account>:role/reroute-demo-github-deploy"
+gh variable set AWS_REGION          --env demo --body ap-northeast-2
+gh variable set DEPLOY_NAME         --env demo --body reroute
+gh variable set DEPLOY_ENVIRONMENT  --env demo --body demo
+gh variable set DEPLOY_ENABLED --body true                          # repository variable; without it a develop push only runs CI
+```
+
+All of these are plain variables; there are no GitHub secrets. Restricting the `demo` environment to the `develop` branch or adding
+required reviewers (**Settings → Environments → demo**) applies to every deployment, manual ones included.
+
+**Manual runs and rollback:** Actions → **deploy** → **Run workflow**. Leave `image_tag` empty to build and deploy the selected
+branch, or enter an older tag (a commit SHA still in ECR; the last 15 are kept) to roll back without building. If the host step
+fails, the previous compose file is left at `/opt/reroute/docker-compose.yml.prev`.
+
 ## 7. Troubleshooting
 
 | Symptom | Cause & fix |
 |---|---|
 | `InsufficientInstanceCapacity` / `VcpuLimitExceeded` during `apply` | GPU quota or AZ capacity → request quota, switch to `g5.xlarge`, or `enable_gpu = false` |
+| Actions `Could not assume role` / `Not authorized to perform sts:AssumeRoleWithWebIdentity` | the job did not run in the `demo` environment, or `github_repository` differs from the repo name → fix tfvars, `terraform apply` |
+| Deploy ends with `SSM command ... ended with status Failed` | read the host log printed by the job; usually an image pull failure or health-check timeout. Roll back to the previous tag |
 | ALB 502 / unhealthy targets | image pull still running, or no `image_tag` image in ECR → check the bootstrap log, re-run `make push` |
 | All runtime chips amber | host booted with an empty NVIDIA key → set the key, then `terraform apply -replace=aws_instance.app` |
 | Optimizer shows "CPU fallback" | cuOpt not ready or GPU not visible → `docker compose logs cuopt`, `nvidia-smi` |
@@ -175,7 +219,9 @@ The first boot can take a few minutes (the cuOpt image is large). Wait until the
 | `iam.tf` | least-privilege instance role, CloudWatch log group |
 | `templates/user_data.sh.tftpl` | bootstrap script (no secrets) |
 | `templates/docker-compose.prod.yml.tftpl` | production compose (cuOpt only when GPU) |
+| `github_oidc.tf` | GitHub Actions OIDC provider and deploy-only role (created only when `github_repository` is set) |
 | `outputs.tf` | URL, ECR repositories, instance id, NVIDIA key secret ARN |
+| `../deploy/deploy.sh` | rolls the host to an image tag with the AWS CLI only and health-checks it (used by Actions and `make deploy`) |
 
 ## 9. Towards production
 

@@ -4,6 +4,10 @@ environment = "demo"
 # GPU host with NVIDIA cuOpt (g6.xlarge = 1x NVIDIA L4). Set false for a cheaper CPU-only demo.
 enable_gpu = true
 
+# AWS Free-plan accounts: only free-tier instance types and a short RDS backup retention are allowed
+# cpu_instance_type        = "m7i-flex.large"
+# db_backup_retention_days = 1
+
 llm_provider       = "auto"   # Nemotron when the NVIDIA key secret is set; otherwise the labelled scripted planner
 retriever_provider = "nvidia"
 nim_model          = "nvidia/nemotron-3-super-120b-a12b"
@@ -19,3 +23,8 @@ image_tag = "latest"
 
 # Restrict who can open the demo
 # allowed_ingress_cidrs = ["203.0.113.0/24"]
+
+# GitHub Actions deploy (.github/workflows/deploy.yml) - OIDC role, no AWS keys stored in GitHub
+# github_repository  = "hyunolike/reroute-irops-agent"
+# github_environment = "demo"              # GitHub environment the deploy job uses
+# create_github_oidc_provider = false      # if the account already has the GitHub OIDC provider
