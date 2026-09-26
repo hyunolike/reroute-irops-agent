@@ -94,6 +94,12 @@ variable "demo_mode" {
   default = true
 }
 
+variable "enable_cloudfront" {
+  description = "HTTPS without a domain: put CloudFront (https://<id>.cloudfront.net) in front of the ALB and accept traffic only from it. Alternative to certificate_arn."
+  type        = bool
+  default     = false
+}
+
 variable "certificate_arn" {
   description = "ACM certificate for HTTPS on the ALB. Empty = HTTP only (demo)."
   type        = string

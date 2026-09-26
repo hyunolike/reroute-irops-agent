@@ -8,6 +8,9 @@ data "aws_ssm_parameter" "cpu_ami" {
 }
 
 locals {
+  public_url = (var.public_hostname != "" ? "https://${var.public_hostname}"
+    : local.cloudfront ? "https://${aws_cloudfront_distribution.main[0].domain_name}"
+  : "http://${aws_lb.main.dns_name}")
   registry = split("/", aws_ecr_repository.repo["reroute-api"].repository_url)[0]
   compose = templatefile("${path.module}/templates/docker-compose.prod.yml.tftpl", {
     api_image   = "${aws_ecr_repository.repo["reroute-api"].repository_url}:${var.image_tag}"
@@ -30,8 +33,8 @@ locals {
     nim_model          = var.nim_model
     optimization       = var.enable_gpu ? "cuopt" : "fallback"
     enable_mcp         = var.enable_mcp
-    mcp_allowed_hosts  = join(",", compact([var.public_hostname, aws_lb.main.dns_name, "reroute-api:*", "localhost:*"]))
-    public_url         = var.public_hostname != "" ? "https://${var.public_hostname}" : "http://${aws_lb.main.dns_name}"
+    mcp_allowed_hosts  = join(",", compact([var.public_hostname, local.cloudfront ? aws_cloudfront_distribution.main[0].domain_name : "", aws_lb.main.dns_name, "reroute-api:*", "localhost:*"]))
+    public_url         = local.public_url
   })
 }
 

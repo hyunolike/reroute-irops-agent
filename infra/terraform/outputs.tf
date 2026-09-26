@@ -1,6 +1,6 @@
 output "url" {
   description = "ReRoute dashboard"
-  value       = "${local.https ? "https" : "http"}://${aws_lb.main.dns_name}"
+  value       = local.public_url
 }
 
 output "ecr_api_repository" {
@@ -23,7 +23,7 @@ output "nvidia_api_key_secret_arn" {
 
 output "mcp_url" {
   description = "Register with NemoClaw: nemoclaw <sandbox> mcp add reroute --url <this> --env REROUTE_MCP_TOKEN (HTTPS required)"
-  value       = var.enable_mcp ? (var.public_hostname != "" && local.https ? "https://${var.public_hostname}/mcp" : "(needs public_hostname + certificate_arn for HTTPS) http://${aws_lb.main.dns_name}/mcp") : "disabled"
+  value       = !var.enable_mcp ? "disabled" : startswith(local.public_url, "https://") ? "${local.public_url}/mcp" : "(needs HTTPS: enable_cloudfront, or public_hostname + certificate_arn) ${local.public_url}/mcp"
 }
 
 output "mcp_token_command" {

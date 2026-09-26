@@ -6,7 +6,7 @@
 #
 # Resources are found by the names Terraform gives them (infra/terraform), so no Terraform state is needed:
 #   instance  tag Name=<name>-<environment>-app     ECR  <name>/reroute-api, <name>/reroute-web
-#   ALB       <name>-<environment>
+#   ALB       <name>-<environment>             CloudFront  comment <name>-<environment> (optional)
 set -euo pipefail
 
 : "${IMAGE_TAG:?IMAGE_TAG is required (a tag already pushed to ECR, e.g. the git commit SHA)}"
@@ -85,14 +85,21 @@ aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTAN
   --query '[StandardOutputContent, StandardErrorContent]' --output text || true
 [[ "$STATUS" == Success ]] || fail "deploy on host ended with status $STATUS (previous compose file kept as docker-compose.yml.prev)"
 
-# Through the ALB, as users reach it (-L follows the HTTP->HTTPS redirect when a certificate is configured).
-ALB=$(aws elbv2 describe-load-balancers --names "$NAME-$ENVIRONMENT" --query 'LoadBalancers[0].DNSName' --output text)
+# From outside, as users reach it: through CloudFront when there is one (the ALB then rejects direct requests),
+# otherwise the ALB (-L follows the HTTP->HTTPS redirect when a certificate is configured).
+CF=$(aws cloudfront list-distributions --query "DistributionList.Items[?Comment=='$NAME-$ENVIRONMENT'].DomainName | [0]" \
+  --output text 2>/dev/null || true)
+if [[ -n "$CF" && "$CF" != None ]]; then
+  PUBLIC="https://$CF"
+else
+  PUBLIC="http://$(aws elbv2 describe-load-balancers --names "$NAME-$ENVIRONMENT" --query 'LoadBalancers[0].DNSName' --output text)"
+fi
 for _ in $(seq 1 30); do
-  if curl -fsSL -o /dev/null "http://$ALB/api/health"; then
-    log "deployed $IMAGE_TAG - http://$ALB"
-    [[ -n "${GITHUB_STEP_SUMMARY:-}" ]] && printf '### Deployed %s\n\nhttp://%s\n' "$IMAGE_TAG" "$ALB" >>"$GITHUB_STEP_SUMMARY"
+  if curl -fsSL -o /dev/null "$PUBLIC/api/health"; then
+    log "deployed $IMAGE_TAG - $PUBLIC"
+    [[ -n "${GITHUB_STEP_SUMMARY:-}" ]] && printf '### Deployed %s\n\n%s\n' "$IMAGE_TAG" "$PUBLIC" >>"$GITHUB_STEP_SUMMARY"
     exit 0
   fi
   sleep 5
 done
-fail "host is healthy but http://$ALB/api/health did not answer within 150s (check ALB target health)"
+fail "host is healthy but $PUBLIC/api/health did not answer within 150s (check ALB target health / CloudFront)"

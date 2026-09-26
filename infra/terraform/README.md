@@ -97,7 +97,7 @@ IAM 인스턴스 역할이 할 수 있는 일: SSM 접속, ECR 이미지 읽기,
 | 4 | **NVIDIA 키를 서버 생성 전에 등록** — 서버는 처음 부팅할 때만 키를 읽습니다 | 아래 배포 절차 3단계 |
 | 5 | **로컬 도구** | Terraform ≥ 1.6, AWS CLI v2, Docker (Apple Silicon이면 buildx), `make` |
 | 6 | **Terraform 상태 저장소** — 기본은 로컬 파일 | 팀으로 쓸 거면 `versions.tf`의 S3 backend 주석 해제 |
-| 7 | **MCP(OpenClaw 연동)용 HTTPS 도메인** — NemoClaw는 HTTPS MCP 엔드포인트만 받습니다 | `public_hostname`과 `certificate_arn` 설정 → `terraform output mcp_url`, 토큰은 `terraform output -raw mcp_token_command` 실행 |
+| 7 | **MCP(OpenClaw 연동)용 HTTPS 주소** — NemoClaw는 HTTPS MCP 엔드포인트만 받습니다 | 도메인이 없으면 `enable_cloudfront = true`, 있으면 `public_hostname`과 `certificate_arn` 설정 → `terraform output mcp_url`, 토큰은 `terraform output -raw mcp_token_command` 실행 |
 | 8 | **비용** — GPU 인스턴스·NAT·ALB·RDS가 켜져 있는 동안 계속 과금 | 시연이 끝나면 `terraform destroy`. 금액은 리전 요금표로 확인 |
 
 ## 5. 배포 절차
@@ -192,6 +192,34 @@ gh variable set DEPLOY_ENABLED --body true                          # 저장소 
 이전 태그(ECR에 남아 있는 커밋 SHA, 최근 15개 보관)를 넣으면 빌드 없이 그 이미지로 되돌립니다. 호스트에서 배포가 실패하면
 직전 compose 파일이 `/opt/reroute/docker-compose.yml.prev`에 남습니다.
 
+### HTTPS: 도메인이 없으면 CloudFront
+
+ALB 기본 주소(`*.elb.amazonaws.com`)로는 ACM 인증서를 받을 수 없습니다. 도메인이 있으면 `public_hostname`과
+`certificate_arn`을 쓰고, 없으면 `enable_cloudfront = true` 한 줄로 `https://<id>.cloudfront.net` 주소가 생깁니다.
+
+```mermaid
+flowchart LR
+    u([사용자]) -->|"HTTPS · TLS 1.3<br/>HTTP는 HTTPS로 301"| cf["CloudFront<br/>기본 인증서"]
+    cf -->|"HTTP + X-Origin-Verify 헤더"| alb["ALB"]
+    x([직접 접근]) -.->|"보안 그룹: CloudFront IP 대역만 허용"| alb
+    alb -->|"헤더 일치"| app["web · api"]
+    alb -.->|"헤더 없음 → 403"| no(("차단"))
+```
+
+- 캐시는 `/_next/static/*`(해시가 붙은 빌드 파일)만 합니다. API, 승인, SSE, MCP는 캐시 없이 그대로 전달됩니다.
+  SSE는 15초마다 keep-alive를 보내므로 CloudFront의 원본 응답 대기 한도(60초)에 걸리지 않습니다.
+- ALB는 CloudFront만 받습니다. 보안 그룹은 AWS 관리형 CloudFront 대역만 열고, 리스너 규칙은 CloudFront가 붙이는
+  비밀 헤더가 있어야 전달합니다. 헤더 검사는 다른 사람의 CloudFront 배포를 거쳐 들어오는 요청까지 막습니다.
+  이때 `allowed_ingress_cidrs`는 적용되지 않습니다.
+- `terraform output url`과 `mcp_url`이 CloudFront 주소로 바뀌고, NemoClaw가 요구하는 HTTPS MCP 주소로 쓸 수 있습니다.
+- 켜거나 끌 때는 **두 단계로 적용**합니다. 앱 설정(`PUBLIC_URL`)이 CloudFront 주소에 의존해 인스턴스가 다시
+  만들어지는데, 한 번에 적용하면 계획과 실제가 달라 실패할 수 있습니다.
+
+```bash
+terraform apply -target='aws_cloudfront_distribution.main[0]'   # 1) CloudFront 먼저 (서비스 유지)
+terraform apply                                                  # 2) ALB 잠금 + 인스턴스 재생성 (1~2분 중단)
+```
+
 ## 7. 문제 해결
 
 | 증상 | 원인과 조치 |
@@ -211,7 +239,8 @@ gh variable set DEPLOY_ENABLED --body true                          # 저장소 
 | `variables.tf` | 리전, GPU 여부, 인스턴스 타입, LLM/검색 모드, 허용 IP 등 |
 | `network.tf` | VPC, 퍼블릭·프라이빗 서브넷 각 2개, IGW, NAT 1개, 라우팅 |
 | `security_groups.tf` | ALB ← 인터넷, 앱 ← ALB, DB ← 앱 |
-| `alb.tf` | ALB, 대상 그룹(web/api), `/api/*` 라우팅, `/internal/*` 차단, 선택적 HTTPS |
+| `alb.tf` | ALB, 대상 그룹(web/api), `/api/*` 라우팅, `/internal/*` 차단, 선택적 HTTPS, CloudFront 전용 모드의 헤더 검사 |
+| `cloudfront.tf` | 도메인 없이 HTTPS: CloudFront 배포, 원본 검증 헤더, 캐시 정책 (`enable_cloudfront`일 때만) |
 | `compute.tf` | EC2 앱 호스트(GPU AMI 또는 AL2023), IMDSv2, 암호화 디스크 |
 | `rds.tf` | PostgreSQL 16 |
 | `ecr.tf` | 이미지 저장소 2개 (push 시 취약점 스캔, 최근 15개 보관) |

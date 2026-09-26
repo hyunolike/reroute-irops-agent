@@ -14,7 +14,11 @@ nim_model          = "nvidia/nemotron-3-super-120b-a12b"
 
 image_tag = "latest"
 
-# HTTPS + DNS name - required for the MCP endpoint used by NemoClaw (OpenClaw)
+# HTTPS without a domain: CloudFront in front of the ALB (https://<id>.cloudfront.net); the ALB then accepts only CloudFront.
+# Also gives the HTTPS MCP endpoint NemoClaw needs. Apply in two steps - see README "HTTPS".
+# enable_cloudfront = true
+
+# HTTPS + DNS name (alternative to CloudFront) - required for the MCP endpoint used by NemoClaw (OpenClaw)
 # public_hostname = "reroute.example.com"
 # enable_mcp      = true
 
