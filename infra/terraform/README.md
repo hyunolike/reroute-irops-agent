@@ -197,7 +197,7 @@ gh variable set DEPLOY_ENABLED --body true                          # 저장소 
 | 증상 | 원인과 조치 |
 |---|---|
 | `apply` 중 `InsufficientInstanceCapacity` / `VcpuLimitExceeded` | GPU 할당량 부족 또는 해당 가용영역에 재고 없음 → 할당량 증가 요청, `g5.xlarge`로 변경, 또는 `enable_gpu = false` |
-| Actions `Could not assume role` / `Not authorized to perform sts:AssumeRoleWithWebIdentity` | 작업이 `demo` environment에서 돌지 않았거나 `github_repository` 값이 저장소 이름과 다름 → tfvars 확인 후 `terraform apply` |
+| Actions `Could not assume role` / `Not authorized to perform sts:AssumeRoleWithWebIdentity` | 작업이 `demo` environment에서 돌지 않았거나 `github_repository` 값이 저장소 이름과 다름. 저장소가 ID 기반 subject(`repo:owner@<id>/repo@<id>`)를 쓰면 `github_sub_claim_prefix`에 `gh api repos/<owner>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix` 값을 넣음. CloudTrail의 `AssumeRoleWithWebIdentity` 실패 기록에서 실제 subject를 볼 수 있음 → tfvars 수정 후 `terraform apply` |
 | 배포가 `SSM command ... ended with status Failed` | 출력된 호스트 로그 확인. 흔한 원인은 이미지 pull 실패나 헬스체크 시간 초과. 이전 태그로 롤백 가능 |
 | ALB 502 / 대상 unhealthy | 이미지 pull이 아직 진행 중이거나 ECR에 `image_tag` 이미지가 없음 → 부팅 로그 확인, `make push` 재실행 |
 | 상단 표시등이 모두 주황색 | NVIDIA 키가 비어 있는 상태로 부팅됨 → 키 등록 후 `terraform apply -replace=aws_instance.app` |

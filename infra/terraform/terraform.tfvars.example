@@ -27,4 +27,7 @@ image_tag = "latest"
 # GitHub Actions deploy (.github/workflows/deploy.yml) - OIDC role, no AWS keys stored in GitHub
 # github_repository  = "hyunolike/reroute-irops-agent"
 # github_environment = "demo"              # GitHub environment the deploy job uses
+# If the deploy fails with "Not authorized to perform sts:AssumeRoleWithWebIdentity", the repo uses immutable
+# OIDC subjects - copy the prefix from: gh api repos/<owner>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix
+# github_sub_claim_prefix = "repo:owner@12345/repo@67890"
 # create_github_oidc_provider = false      # if the account already has the GitHub OIDC provider

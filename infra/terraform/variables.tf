@@ -130,6 +130,12 @@ variable "github_environment" {
   default     = "demo"
 }
 
+variable "github_sub_claim_prefix" {
+  description = "OIDC subject prefix when the repo uses GitHub's immutable subjects (repo:owner@<id>/repo@<id>). Get it with: gh api repos/<owner>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix"
+  type        = string
+  default     = ""
+}
+
 variable "create_github_oidc_provider" {
   description = "Create the GitHub OIDC provider. Set false if the AWS account already has token.actions.githubusercontent.com."
   type        = bool
