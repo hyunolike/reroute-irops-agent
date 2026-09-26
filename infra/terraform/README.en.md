@@ -197,7 +197,7 @@ fails, the previous compose file is left at `/opt/reroute/docker-compose.yml.pre
 | Symptom | Cause & fix |
 |---|---|
 | `InsufficientInstanceCapacity` / `VcpuLimitExceeded` during `apply` | GPU quota or AZ capacity → request quota, switch to `g5.xlarge`, or `enable_gpu = false` |
-| Actions `Could not assume role` / `Not authorized to perform sts:AssumeRoleWithWebIdentity` | the job did not run in the `demo` environment, or `github_repository` differs from the repo name → fix tfvars, `terraform apply` |
+| Actions `Could not assume role` / `Not authorized to perform sts:AssumeRoleWithWebIdentity` | the job did not run in the `demo` environment, or `github_repository` differs from the repo name. If the repo uses ID-based subjects (`repo:owner@<id>/repo@<id>`), set `github_sub_claim_prefix` to `gh api repos/<owner>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix`; CloudTrail's failed `AssumeRoleWithWebIdentity` events show the actual subject → fix tfvars, `terraform apply` |
 | Deploy ends with `SSM command ... ended with status Failed` | read the host log printed by the job; usually an image pull failure or health-check timeout. Roll back to the previous tag |
 | ALB 502 / unhealthy targets | image pull still running, or no `image_tag` image in ECR → check the bootstrap log, re-run `make push` |
 | All runtime chips amber | host booted with an empty NVIDIA key → set the key, then `terraform apply -replace=aws_instance.app` |

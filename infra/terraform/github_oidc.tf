@@ -3,6 +3,12 @@
 # and it can only push the two ECR repositories and run a shell command on the app host via SSM.
 locals {
   github_deploy = var.github_repository != ""
+  # GitHub issues either the name-based subject (repo:owner/repo) or, for repos on immutable subjects,
+  # repo:owner@<id>/repo@<id>. Both are pinned to the one environment.
+  github_subjects = compact([
+    "repo:${var.github_repository}:environment:${var.github_environment}",
+    var.github_sub_claim_prefix != "" ? "${var.github_sub_claim_prefix}:environment:${var.github_environment}" : "",
+  ])
 }
 
 resource "aws_iam_openid_connect_provider" "github" {
@@ -34,7 +40,7 @@ data "aws_iam_policy_document" "github_assume" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:environment:${var.github_environment}"]
+      values   = local.github_subjects
     }
   }
 }
