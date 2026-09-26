@@ -50,7 +50,7 @@ grep -E 'image: .*/$NAME/reroute-(api|web):' docker-compose.yml
 docker compose pull --quiet
 docker compose up -d --remove-orphans
 for i in \$(seq 1 60); do
-  if curl -fsS -o /dev/null http://127.0.0.1:8000/api/health && curl -fsS -o /dev/null http://127.0.0.1:3000/; then
+  if curl -fs -o /dev/null http://127.0.0.1:8000/api/health && curl -fs -o /dev/null http://127.0.0.1:3000/; then
     echo "healthy after \$((i * 5))s"; docker compose ps; docker image prune -f >/dev/null; exit 0
   fi
   sleep 5
