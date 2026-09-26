@@ -33,8 +33,9 @@ variable "gpu_instance_type" {
 }
 
 variable "cpu_instance_type" {
-  type    = string
-  default = "t3.large"
+  description = "CPU app host (enable_gpu=false). AWS Free-plan accounts can only launch free-tier types, e.g. m7i-flex.large."
+  type        = string
+  default     = "t3.large"
 }
 
 variable "root_volume_gb" {
@@ -45,6 +46,12 @@ variable "root_volume_gb" {
 variable "db_instance_class" {
   type    = string
   default = "db.t4g.micro"
+}
+
+variable "db_backup_retention_days" {
+  description = "RDS automated backup retention. AWS Free-plan accounts reject values above their limit (use 1)."
+  type        = number
+  default     = 3
 }
 
 variable "image_tag" {
