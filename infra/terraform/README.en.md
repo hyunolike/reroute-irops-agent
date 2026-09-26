@@ -97,7 +97,7 @@ The instance role may only: use SSM, read ECR, read **this deployment's two secr
 | 4 | **Register the NVIDIA key before the host is created** — the host reads it only at first boot | step 3 of the procedure below |
 | 5 | **Local tools** | Terraform ≥ 1.6, AWS CLI v2, Docker (buildx on Apple Silicon), `make` |
 | 6 | **Terraform state** — local file by default | for a team, uncomment the S3 backend in `versions.tf` |
-| 7 | **HTTPS hostname for MCP (OpenClaw integration)** — NemoClaw only accepts HTTPS MCP endpoints | set `public_hostname` and `certificate_arn` → `terraform output mcp_url`; token via `terraform output -raw mcp_token_command` |
+| 7 | **HTTPS address for MCP (OpenClaw integration)** — NemoClaw only accepts HTTPS MCP endpoints | without a domain `enable_cloudfront = true`; with one, set `public_hostname` and `certificate_arn` → `terraform output mcp_url`; token via `terraform output -raw mcp_token_command` |
 | 8 | **Cost** — GPU instance, NAT, ALB and RDS bill while running | `terraform destroy` after the demo; check your region's price list |
 
 ## 5. Deployment procedure
@@ -192,6 +192,34 @@ required reviewers (**Settings → Environments → demo**) applies to every dep
 branch, or enter an older tag (a commit SHA still in ECR; the last 15 are kept) to roll back without building. If the host step
 fails, the previous compose file is left at `/opt/reroute/docker-compose.yml.prev`.
 
+### HTTPS: CloudFront when there is no domain
+
+The ALB's own name (`*.elb.amazonaws.com`) cannot get an ACM certificate. With a domain use `public_hostname` and
+`certificate_arn`; without one, `enable_cloudfront = true` gives an `https://<id>.cloudfront.net` address.
+
+```mermaid
+flowchart LR
+    u([user]) -->|"HTTPS · TLS 1.3<br/>HTTP → 301 HTTPS"| cf["CloudFront<br/>default certificate"]
+    cf -->|"HTTP + X-Origin-Verify header"| alb["ALB"]
+    x([direct access]) -.->|"security group: CloudFront ranges only"| alb
+    alb -->|"header matches"| app["web · api"]
+    alb -.->|"no header → 403"| no(("blocked"))
+```
+
+- Only `/_next/static/*` (content-hashed build assets) is cached. API, approvals, SSE and MCP pass through uncached.
+  SSE sends a keep-alive every 15s, well inside CloudFront's 60s origin read timeout.
+- The ALB accepts only CloudFront: its security group opens just the AWS-managed CloudFront ranges, and listener rules
+  forward only requests carrying the secret header CloudFront adds — which also stops traffic relayed through someone
+  else's CloudFront distribution. `allowed_ingress_cidrs` no longer applies in this mode.
+- `terraform output url` and `mcp_url` become the CloudFront address — an HTTPS MCP endpoint NemoClaw accepts.
+- **Apply in two steps** when turning it on or off. The app's `PUBLIC_URL` depends on the CloudFront address, which
+  recreates the host; applying everything at once can fail with a plan/apply mismatch.
+
+```bash
+terraform apply -target='aws_cloudfront_distribution.main[0]'   # 1) CloudFront first (service stays up)
+terraform apply                                                  # 2) lock the ALB + recreate the host (1-2 min down)
+```
+
 ## 7. Troubleshooting
 
 | Symptom | Cause & fix |
@@ -211,7 +239,8 @@ fails, the previous compose file is left at `/opt/reroute/docker-compose.yml.pre
 | `variables.tf` | region, GPU toggle, instance types, LLM / retriever modes, allowed IPs |
 | `network.tf` | VPC, 2 public + 2 private subnets, IGW, 1 NAT, routing |
 | `security_groups.tf` | ALB ← internet, app ← ALB, DB ← app |
-| `alb.tf` | ALB, target groups (web/api), `/api/*` routing, `/internal/*` blocked, optional HTTPS |
+| `alb.tf` | ALB, target groups (web/api), `/api/*` routing, `/internal/*` blocked, optional HTTPS, header check in CloudFront-only mode |
+| `cloudfront.tf` | HTTPS without a domain: CloudFront distribution, origin-verify header, cache policies (only with `enable_cloudfront`) |
 | `compute.tf` | EC2 app host (GPU AMI or AL2023), IMDSv2, encrypted disk |
 | `rds.tf` | PostgreSQL 16 |
 | `ecr.tf` | two registries (scan on push, keep last 15 images) |

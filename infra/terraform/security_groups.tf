@@ -3,19 +3,27 @@ resource "aws_security_group" "alb" {
   description = "Public entry: HTTP/HTTPS to the ALB only"
   vpc_id      = aws_vpc.main.id
 
-  ingress {
-    description = "HTTP"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = var.allowed_ingress_cidrs
+  dynamic "ingress" {
+    for_each = local.cloudfront ? [] : [80, 443]
+    content {
+      description = ingress.value == 80 ? "HTTP" : "HTTPS"
+      from_port   = ingress.value
+      to_port     = ingress.value
+      protocol    = "tcp"
+      cidr_blocks = var.allowed_ingress_cidrs
+    }
   }
-  ingress {
-    description = "HTTPS"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = var.allowed_ingress_cidrs
+  # With CloudFront only its origin-facing ranges reach the ALB (HTTP; CloudFront terminates HTTPS).
+  # The prefix list counts ~55 entries against the 60-rules quota, so it is used for port 80 only.
+  dynamic "ingress" {
+    for_each = local.cloudfront ? [80] : []
+    content {
+      description     = "HTTP from CloudFront only"
+      from_port       = 80
+      to_port         = 80
+      protocol        = "tcp"
+      prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront[0].id]
+    }
   }
   egress {
     from_port   = 0

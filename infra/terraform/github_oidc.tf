@@ -69,7 +69,7 @@ data "aws_iam_policy_document" "github_deploy" {
   }
   statement {
     sid       = "FindHostAndAlb"
-    actions   = ["ec2:DescribeInstances", "elasticloadbalancing:DescribeLoadBalancers"]
+    actions   = ["ec2:DescribeInstances", "elasticloadbalancing:DescribeLoadBalancers", "cloudfront:ListDistributions"]
     resources = ["*"] # Describe* calls do not support resource-level permissions
   }
   statement {
