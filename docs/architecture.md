@@ -211,7 +211,8 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    user([심사위원 · 운영자]) -->|"HTTP/HTTPS"| alb
+    user([심사위원 · 운영자]) -->|"HTTPS"| cf["CloudFront"]
+    cf -->|"HTTP + 비밀 헤더"| alb
     admin([관리자]) -.->|"SSM Session Manager"| ec2
     subgraph vpc["VPC (가용영역 2개)"]
         subgraph pub["퍼블릭 서브넷"]
@@ -219,11 +220,12 @@ flowchart TB
             nat["NAT Gateway"]
         end
         subgraph priv["프라이빗 서브넷"]
-            subgraph ec2["EC2 GPU 호스트 · docker compose"]
+            subgraph ec2["EC2 앱 호스트 · docker compose"]
                 web["web"]
                 api["reroute-api"]
                 air["airline-service"]
-                cu["cuOpt"]
+                cu["cuOpt (GPU일 때)"]
+                sb["OpenShell 샌드박스<br/>에이전트 worker"]
             end
             rds[("RDS PostgreSQL")]
         end
@@ -235,10 +237,14 @@ flowchart TB
     api --> cu
     api --> rds
     air --> rds
+    sb -->|"허용 경로만"| api
     ec2 --> nat --> nim["NVIDIA API"]
     ec2 -.-> sm["Secrets Manager"]
     ec2 -.-> ecr["ECR"]
     ec2 -.-> cw["CloudWatch Logs"]
 ```
+
+라이브 데모는 여기에 **GCP의 NemoClaw 호스트**(OpenClaw와 브리지)와 **GitHub Actions 자동 배포**가 더해진 구성입니다.
+전체 그림과 연결별 설명은 README의 [클라우드 배포 구조](../README.md#클라우드-배포-구조)에 있습니다.
 
 상세 절차, 비밀값 흐름, 사전 점검 체크리스트는 [infra/terraform/README.md](../infra/terraform/README.md)에 있습니다.

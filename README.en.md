@@ -35,7 +35,7 @@ https://github.com/user-attachments/assets/3676a23d-fc44-42bb-8b70-774336f012c3
 ## Contents
 1. [Problem](#problem) · 2. [Solution](#solution) · 3. [Why Agentic AI?](#why-agentic-ai) · 4. [Why NVIDIA?](#why-nvidia)
 5. [Architecture](#architecture) · [How the LLM agent works](#how-the-llm-agent-works) · [NemoClaw · OpenClaw](#nemoclaw--openclaw-integration-mcp) · 6. [NVIDIA stack & run modes](#nvidia-stack--run-modes) · 7. [Demo](#demo) · 8. [Getting started](#getting-started)
-9. [AWS deployment](#aws-deployment) · 10. [Security](#security) · 11. [Optimization](#optimization) · 12. [Screenshots](#screenshots) · 13. [Future work](#future-work)
+9. [Cloud deployment](#cloud-deployment) · [AWS deployment](#aws-deployment) · 10. [Security](#security) · 11. [Optimization](#optimization) · 12. [Screenshots](#screenshots) · 13. [Future work](#future-work)
 
 ---
 
@@ -252,6 +252,67 @@ make test                       # 99 backend tests
 DATABASE_URL=sqlite:///./reroute.db make dev-api    # or a local PostgreSQL
 make dev-web                    # http://localhost:3000 (proxies /api to :8000)
 ```
+
+## Cloud deployment
+
+The live demo runs across two clouds: **AWS** hosts the ReRoute service, **GCP** hosts NemoClaw and OpenClaw, and both call NVIDIA's
+hosted models. GitHub Actions deploys.
+
+```mermaid
+flowchart LR
+    op([operators · judges]) -->|HTTPS| cf
+
+    subgraph aws["AWS · ap-northeast-2 (Terraform)"]
+        cf["CloudFront<br/>HTTPS without a domain"] -->|"HTTP + secret header"| alb["ALB<br/>CloudFront only"]
+        subgraph ec2["EC2 app host (private subnet, Docker 29)"]
+            web["web :3000"]
+            cp["reroute-api :8000<br/>control plane · MCP · bridge API"]
+            air["airline-service :8001"]
+            subgraph sb["OpenShell sandbox"]
+                wk["agent worker<br/>no DB credentials · no signing key"]
+            end
+        end
+        alb --> web
+        alb --> cp
+        wk -->|"allowed paths only<br/>worker token injected by provider"| cp
+        wk --> air
+        cp --> rds[("RDS PostgreSQL")]
+        air --> rds
+        sm["Secrets Manager"] -.->|at boot| ec2
+    end
+
+    subgraph gcp["GCP · asia-northeast3 (separate project)"]
+        subgraph vm["VM e2-standard-4 (inbound: SSH only)"]
+            br["openclaw-bridge<br/>(systemd)"]
+            subgraph ns["NemoClaw sandbox (OpenShell)"]
+                oc["OpenClaw"]
+            end
+        end
+        br -->|"nemoclaw agent"| oc
+    end
+
+    br -->|"HTTPS: claim / reply"| cf
+    oc -->|"HTTPS: MCP (/mcp)"| cf
+
+    nv["NVIDIA API catalog<br/>Nemotron (NIM) · NeMo Retriever"]
+    wk -->|"Nemotron reasoning"| nv
+    cp -->|"policy retrieval"| nv
+    oc -->|"Nemotron reasoning"| nv
+
+    gh["GitHub Actions<br/>merge to develop → CI → ECR → SSM"] -.->|"OIDC (no AWS keys stored)"| ec2
+```
+
+| Link | What happens |
+|---|---|
+| operator → CloudFront → ALB | HTTPS terminates at CloudFront; the ALB accepts only CloudFront ranges carrying the secret header |
+| worker → control plane, airline API | only paths the OpenShell policy allows; the worker token and NVIDIA key are provider-injected, the sandbox holds placeholders |
+| AWS → NVIDIA | the worker calls Nemotron, the control plane calls NeMo Retriever, both through NAT |
+| GCP bridge → ReRoute | picks up tasks the dashboard sent to OpenClaw and reports the result; outbound only, no open port on GCP |
+| OpenClaw → ReRoute MCP | attaches to the same task and calls the tools; MCP has no approve/execute tool, so a human approves on the dashboard |
+| GitHub → AWS | merging to `develop` runs CI, builds images, pushes to ECR and rolls the host over SSM; the bridge is deployed to the GCP VM directly |
+
+cuOpt runs on the app host when it is a GPU instance (`enable_gpu = true`). The live demo's AWS account is on the free plan and cannot
+launch GPU instances, so the same MILP runs on CPU (HiGHS).
 
 ## AWS deployment
 

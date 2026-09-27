@@ -203,7 +203,8 @@ C4 MCT; C5 same destination; C6 carrier/window/flight-status policy; objective =
 
 ```mermaid
 flowchart TB
-    user([Judges · operators]) -->|"HTTP/HTTPS"| alb
+    user([Judges · operators]) -->|"HTTPS"| cf["CloudFront"]
+    cf -->|"HTTP + secret header"| alb
     admin([Admin]) -.->|"SSM Session Manager"| ec2
     subgraph vpc["VPC (2 AZs)"]
         subgraph pub["Public subnets"]
@@ -211,11 +212,12 @@ flowchart TB
             nat["NAT Gateway"]
         end
         subgraph priv["Private subnets"]
-            subgraph ec2["EC2 GPU host · docker compose"]
+            subgraph ec2["EC2 app host · docker compose"]
                 web["web"]
                 api["reroute-api"]
                 air["airline-service"]
-                cu["cuOpt"]
+                cu["cuOpt (with GPU)"]
+                sb["OpenShell sandbox<br/>agent worker"]
             end
             rds[("RDS PostgreSQL")]
         end
@@ -227,10 +229,14 @@ flowchart TB
     api --> cu
     api --> rds
     air --> rds
+    sb -->|"allowed paths only"| api
     ec2 --> nat --> nim["NVIDIA API"]
     ec2 -.-> sm["Secrets Manager"]
     ec2 -.-> ecr["ECR"]
     ec2 -.-> cw["CloudWatch Logs"]
 ```
+
+The live demo adds a **NemoClaw host on GCP** (OpenClaw and the bridge) and **GitHub Actions deploys** to this layout.
+The full picture, link by link, is in the README's [Cloud deployment](../README.en.md#cloud-deployment).
 
 Procedure, secret flow and pre-deployment checklist: [infra/terraform/README.en.md](../infra/terraform/README.en.md).

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowLeft, CheckCircle2, CircleDashed } from "lucide-react";
 import { ArchitectureDiagram } from "@/components/ArchitectureDiagram";
+import { CloudDeployment } from "@/components/CloudDeployment";
 import { Panel, Pill } from "@/components/ui";
 import { api } from "@/lib/api";
 import type { Runtime } from "@/lib/types";
@@ -116,6 +117,10 @@ export default function Guide() {
           <ArchitectureDiagram />
         </Panel>
 
+        <Panel title="Cloud deployment — live demo">
+          <CloudDeployment />
+        </Panel>
+
         <Panel title="NVIDIA stack — role & live status in this deployment" bodyClassName="p-0">
           <table className="w-full text-left text-sm">
             <thead className="text-[11px] uppercase tracking-wider text-ops-muted">
@@ -178,6 +183,7 @@ min Σ delay·tier + VIP delay + downgrade
             <li>
               Dashboard에서 <b className="text-white">Run Agent</b> — 오른쪽 타임라인에서 Tool 호출과 런타임 배지(Nemotron · NeMo Retriever · cuOpt)를 확인.
               입력창 위에서 <b className="text-white">OpenClaw (NemoClaw)</b>를 고르면 같은 작업을 외부 에이전트가 MCP로 계획합니다(점이 초록색일 때).
+              NVIDIA 무료 엔드포인트가 과부하를 돌려주면 브리지가 재시도해 몇 분 걸릴 수 있습니다.
             </li>
             <li>KPI: 35명 → 자동 31 · 검토 3 · 대안 없음 1. “Why an optimizer?”에서 선착순 대비 연결편 놓침 4→0, SSR 위반 2→0.</li>
             <li>Allocation 표에서 강도윤 승객의 사유: 7C1102는 연결을 살리지만 IROP-002(무협정 항공사)로 차단 → 운영자 판단 필요. 정책 칩을 hover하면 근거 문서가 강조됨.</li>
@@ -187,6 +193,7 @@ min Σ delay·tier + VIP delay + downgrade
             <li>검토 승객 1명 체크 후 Approve → EXECUTING → COMPLETED, Final Report와 실제 좌석 재고 변화.</li>
             <li>
               Security 패널 <b className="text-white">Run all probes</b> → 외부 API · ~/.ssh · 자기 승인 호출 DENY, 허용 API만 ALLOW.
+              라이브 데모에서는 에이전트가 실제 OpenShell 샌드박스 안에서 돌며(상단 Sandbox 표시), 같은 정책을 OpenShell이 강제합니다.
             </li>
             <li>“KE125 45분 지연” 시나리오 → Agent가 RBK-002를 찾아 “재배정 불필요”로 스스로 종료.</li>
           </ol>
