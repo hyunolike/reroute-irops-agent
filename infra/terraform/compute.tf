@@ -13,12 +13,13 @@ locals {
   : "http://${aws_lb.main.dns_name}")
   registry = split("/", aws_ecr_repository.repo["reroute-api"].repository_url)[0]
   compose = templatefile("${path.module}/templates/docker-compose.prod.yml.tftpl", {
-    api_image   = "${aws_ecr_repository.repo["reroute-api"].repository_url}:${var.image_tag}"
-    web_image   = "${aws_ecr_repository.repo["reroute-web"].repository_url}:${var.image_tag}"
-    cuopt_image = var.cuopt_image
-    enable_gpu  = var.enable_gpu
-    log_group   = aws_cloudwatch_log_group.app.name
-    region      = var.region
+    api_image        = "${aws_ecr_repository.repo["reroute-api"].repository_url}:${var.image_tag}"
+    web_image        = "${aws_ecr_repository.repo["reroute-web"].repository_url}:${var.image_tag}"
+    cuopt_image      = var.cuopt_image
+    enable_gpu       = var.enable_gpu
+    enable_openshell = var.enable_openshell
+    log_group        = aws_cloudwatch_log_group.app.name
+    region           = var.region
   })
   user_data = templatefile("${path.module}/templates/user_data.sh.tftpl", {
     region             = var.region
@@ -35,6 +36,13 @@ locals {
     enable_mcp         = var.enable_mcp
     mcp_allowed_hosts  = join(",", compact([var.public_hostname, local.cloudfront ? aws_cloudfront_distribution.main[0].domain_name : "", aws_lb.main.dns_name, "reroute-api:*", "localhost:*"]))
     public_url         = local.public_url
+    enable_openshell   = var.enable_openshell
+    openshell_version  = var.openshell_version
+    # Files the bootstrap places in /opt/openshell/reroute (see infra/deploy/openshell-agent.sh)
+    openshell_script_b64         = filebase64("${path.module}/../deploy/openshell-agent.sh")
+    openshell_policy_b64         = filebase64("${path.module}/../../nvidia/openshell/policies/reroute-agent.yaml")
+    openshell_nvidia_profile_b64 = filebase64("${path.module}/../../nvidia/openshell/providers/nvidia-reroute.yaml")
+    openshell_worker_profile_b64 = filebase64("${path.module}/../../nvidia/openshell/providers/reroute-worker.yaml")
   })
 }
 

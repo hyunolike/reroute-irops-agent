@@ -19,8 +19,10 @@ landlock:
   compatibility: best_effort
 
 process:
-  run_as_user: sandbox
-  run_as_group: sandbox
+  # The image's non-root `reroute` user (apps/api/Dockerfile). OpenShell accepts `sandbox` or a numeric UID/GID;
+  # the Docker driver requires the account to exist in the image, which `sandbox` does not.
+  run_as_user: "10001"
+  run_as_group: "10001"
 
 network_policies:
   airline_api:

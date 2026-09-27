@@ -51,6 +51,7 @@ print("AGENT_STEP_DELAY_MS=350")
 print("AIRLINE_API_BASE_URL=http://airline-service:8000")
 print("REROUTE_API_BASE_URL=http://reroute-api:8000")
 print("SECURITY_RUNTIME=policy-mirror")
+print("AGENT_EXECUTION=${enable_openshell ? "remote" : "inline"}")
 print("CORS_ORIGINS=")
 PY
 umask 022
@@ -62,3 +63,15 @@ aws ecr get-login-password --region "$REGION" | docker login --username AWS --pa
 cd "$APP_DIR"
 docker compose pull
 docker compose up -d
+%{ if enable_openshell ~}
+
+# --- agent worker in an NVIDIA OpenShell sandbox (infra/deploy/openshell-agent.sh) ---
+OS_DIR=/opt/openshell/reroute
+mkdir -p "$OS_DIR" && chmod 700 "$OS_DIR"
+echo "${openshell_script_b64}" | base64 -d > "$OS_DIR/openshell-agent.sh" && chmod 700 "$OS_DIR/openshell-agent.sh"
+echo "${openshell_policy_b64}" | base64 -d > "$OS_DIR/reroute-agent.yaml"
+echo "${openshell_nvidia_profile_b64}" | base64 -d > "$OS_DIR/nvidia-reroute.yaml"
+echo "${openshell_worker_profile_b64}" | base64 -d > "$OS_DIR/reroute-worker.yaml"
+OPENSHELL_VERSION="${openshell_version}" "$OS_DIR/openshell-agent.sh" install
+"$OS_DIR/openshell-agent.sh" start
+%{ endif ~}

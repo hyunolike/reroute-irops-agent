@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 import httpx
 
@@ -61,9 +62,7 @@ class AgentWorker:
             ]
         )
         # Tool badges reflect the providers the control plane ACTUALLY runs (retriever / solver)
-        r = self.cp.request("GET", "/internal/agent/runtime")
-        r.raise_for_status()
-        overrides = {k: Component(v) for k, v in r.json()["component_overrides"].items()}
+        overrides = {k: Component(v) for k, v in self._control_plane_runtime()["component_overrides"].items()}
         self.orchestrator = AgentOrchestrator(
             repo=RemoteAgentRepository(self.cp),  # type: ignore[arg-type]
             llm=llm,
@@ -76,6 +75,26 @@ class AgentWorker:
             step_delay_ms=settings.agent_step_delay_ms,
             max_steps=settings.agent_max_steps,
         )
+
+    def _control_plane_runtime(self, max_delay: float = 30.0) -> dict:
+        """The worker and the control plane start together (host boot, redeploy), so wait for it instead of exiting.
+
+        Only "not up yet" is retried - connection errors and 5xx. A 4xx (wrong worker token) or a policy violation
+        is a configuration error and fails fast.
+        """
+        delay = 1.0
+        while True:
+            try:
+                r = self.cp.request("GET", "/internal/agent/runtime")
+                if r.status_code < 500:
+                    r.raise_for_status()
+                    return r.json()
+                reason = f"HTTP {r.status_code}"
+            except httpx.TransportError as e:
+                reason = type(e).__name__
+            log.warning("control plane not ready (%s); retrying in %.0fs", reason, delay)
+            time.sleep(delay)
+            delay = min(delay * 2, max_delay)
 
     async def run_once(self) -> bool:
         r = self.cp.request("POST", "/internal/agent/tasks/claim")

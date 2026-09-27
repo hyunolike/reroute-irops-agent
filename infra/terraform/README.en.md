@@ -220,6 +220,22 @@ terraform apply -target='aws_cloudfront_distribution.main[0]'   # 1) CloudFront 
 terraform apply                                                  # 2) lock the ALB + recreate the host (1-2 min down)
 ```
 
+### Run the agent in an OpenShell sandbox (`enable_openshell`)
+
+With `enable_openshell = true` the agent runs outside the API process, as a DB-less worker inside an **NVIDIA OpenShell
+sandbox** on the app host (`AGENT_EXECUTION=remote`). The bootstrap sets it up with `infra/deploy/openshell-agent.sh`, and
+`deploy.sh` recreates the worker sandbox on every rollout so it follows the new image.
+
+| Step | What and why |
+|---|---|
+| Docker ≥ 28 | Older engines cannot copy into a container created with a numeric user (moby#34143). AL2023 ships 25, so the official static binaries replace it and `dnf` excludes the packages |
+| OpenShell 0.1.1 | The release RPM needs podman, so the standalone binaries are used; the gateway runs as the `openshell-gateway` systemd service |
+| Providers | `nvidia/openshell/providers/`: the NVIDIA key is injected only on `/v1/chat/completions`, the worker token only on control-plane paths; the sandbox holds placeholders |
+| Policy | Same rules as `reroute-agent.yaml`; only hostnames become the host's VPC DNS name (sandbox DNS ignores `/etc/hosts`, loopback is always refused) |
+| Reboot | `reroute-agent-sandbox` recreates the sandbox when the gateway starts |
+
+Check it: `aws ssm start-session --target <instance_id>`, then `sudo openshell sandbox list` and `sudo openshell logs reroute-agent --since 5m`.
+
 ## 7. Troubleshooting
 
 | Symptom | Cause & fix |
