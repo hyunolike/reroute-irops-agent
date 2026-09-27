@@ -1,0 +1,826 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<style>
+@font-face { font-family: Pretendard; font-weight: 400; src: url(node_modules/pretendard/dist/web/static/woff2/Pretendard-Regular.woff2); }
+@font-face { font-family: Pretendard; font-weight: 500; src: url(node_modules/pretendard/dist/web/static/woff2/Pretendard-Medium.woff2); }
+@font-face { font-family: Pretendard; font-weight: 600; src: url(node_modules/pretendard/dist/web/static/woff2/Pretendard-SemiBold.woff2); }
+@font-face { font-family: Pretendard; font-weight: 700; src: url(node_modules/pretendard/dist/web/static/woff2/Pretendard-Bold.woff2); }
+@font-face { font-family: Pretendard; font-weight: 800; src: url(node_modules/pretendard/dist/web/static/woff2/Pretendard-ExtraBold.woff2); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url(node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url(node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-700-normal.woff2); }
+
+:root {
+  --nv: #76B900; --nv-dark: #5a8f00; --nv-light: #a4d65e;
+  --bg: #070b12; --panel: #0d1420; --panel2: #111a29; --line: #1e2a3d; --muted: #7d8aa3;
+  --text: #e2e8f0; --amber: #fbbf24; --rose: #fb7185; --violet: #a78bfa;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); color: var(--text);
+  font-family: Pretendard, "Noto Sans KR", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+.mono { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; }
+svg { width: 1em; height: 1em; display: inline-block; vertical-align: -0.125em; }
+
+#stage { position: absolute; inset: 0; overflow: hidden; }
+#glow { position: absolute; inset: -200px; pointer-events: none;
+  background:
+    radial-gradient(1400px 700px at 85% -10%, rgba(118,185,0,0.10), transparent 60%),
+    radial-gradient(1000px 600px at -10% 10%, rgba(56,189,248,0.06), transparent 60%); }
+#grid { position: absolute; inset: 0; opacity: .35;
+  background-image: linear-gradient(rgba(30,42,61,.35) 1px, transparent 1px), linear-gradient(90deg, rgba(30,42,61,.35) 1px, transparent 1px);
+  background-size: 64px 64px; mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%); }
+.scene { position: absolute; inset: 0; opacity: 0; }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; }
+.caption { position: absolute; left: 0; right: 0; top: 96px; text-align: center; font-size: 60px; font-weight: 800; letter-spacing: -0.02em; color: #fff; }
+.caption em { font-style: normal; color: var(--nv); }
+.label { font-size: 17px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #cbd5e1; }
+
+/* S1 */
+#s1 .wrap { position: absolute; left: 0; right: 0; top: 190px; text-align: center; }
+#s1 .dis { display: inline-flex; align-items: center; gap: 12px; color: var(--muted); font-size: 22px; font-weight: 700; letter-spacing: .2em; }
+#s1 .flight { font-size: 250px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; margin-top: 30px; color: #fff; }
+#s1 .route { font-size: 64px; font-weight: 800; margin-top: 18px; display: inline-flex; gap: 26px; align-items: center; }
+#s1 .route svg { color: var(--nv); }
+#s1 .badge { position: absolute; left: 50%; top: 420px; margin-left: 330px; transform-origin: center;
+  font-size: 34px; font-weight: 800; letter-spacing: .08em; color: #fecdd3; background: rgba(244,63,94,.15);
+  border: 3px solid rgba(251,113,133,.8); border-radius: 999px; padding: 8px 26px; }
+#s1 .line { position: absolute; left: 0; right: 0; top: 820px; text-align: center; font-size: 58px; font-weight: 800; }
+#s1 .line b { color: var(--rose); }
+#s1 .reason { position: absolute; left: 0; right: 0; top: 920px; text-align: center; font-size: 22px; color: var(--muted); }
+
+/* S2 */
+#s2 .steps { position: absolute; left: 160px; right: 160px; top: 290px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+.step { display: flex; gap: 14px; align-items: center; padding: 18px 18px; border-radius: 14px; border: 1px solid var(--line); background: rgba(13,20,32,.8); }
+.step .ic { width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; background: rgba(118,185,0,.12); color: var(--nv); font-size: 22px; flex: none; }
+.step .t { font-size: 19px; font-weight: 700; white-space: nowrap; }
+.step .s { font-size: 14px; color: var(--muted); margin-top: 3px; white-space: nowrap; }
+.step.on { border-color: var(--nv); background: rgba(118,185,0,.10); box-shadow: 0 0 0 1px rgba(118,185,0,.3), 0 0 40px rgba(118,185,0,.15); }
+.step.on .ic { background: var(--nv); color: #000; }
+.step.off { opacity: .45; }
+#s2 .cmd { position: absolute; left: 160px; right: 160px; top: 440px; padding: 22px; }
+#s2 .row { display: flex; gap: 18px; }
+#s2 .input { flex: 1; position: relative; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); height: 92px; display: flex; align-items: center; padding: 0 70px 0 106px; font-size: 32px; color: #fff; white-space: nowrap; overflow: hidden; }
+#s2 .input.focus { border-color: rgba(118,185,0,.6); box-shadow: 0 0 0 3px rgba(118,185,0,.25); }
+#s2 .ops { position: absolute; left: 26px; font-size: 24px; color: var(--nv); }
+#s2 .enter { position: absolute; right: 26px; color: var(--muted); font-size: 28px; }
+#s2 .caret { display: inline-block; width: 3px; height: 38px; background: var(--nv); margin-left: 3px; vertical-align: -6px; }
+#s2 .btn { width: 300px; height: 92px; border-radius: 14px; background: var(--nv); color: #000; font-size: 30px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 14px; transform-origin: center; }
+#s2 .btn.busy { background: rgba(118,185,0,.25); color: var(--nv-light); }
+#s2 .chips { display: flex; gap: 12px; margin-top: 18px; align-items: center; font-size: 20px; color: var(--muted); }
+#s2 .chip { border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px; color: #cbd5e1; }
+#s2 .chip.on { border-color: var(--nv); color: #fff; background: rgba(118,185,0,.12); }
+#cursor { position: absolute; width: 38px; height: 38px; left: 0; top: 0; z-index: 50; opacity: 0; filter: drop-shadow(0 4px 10px rgba(0,0,0,.6)); }
+#ripple { position: absolute; z-index: 49; width: 80px; height: 80px; border-radius: 50%; border: 3px solid var(--nv-light); opacity: 0; }
+
+/* S3 */
+#s3 .caption { top: 70px; font-size: 54px; }
+#s3 .act { position: absolute; left: 110px; top: 190px; width: 940px; height: 820px; padding: 26px 32px; overflow: hidden; }
+#s3 .act .hd { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 18px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+#s3 .act .hd .sub { font-size: 17px; color: var(--muted); margin-top: 6px; }
+#s3 .tc { font-size: 18px; color: var(--muted); }
+.tl { display: flex; gap: 18px; margin-bottom: 14px; }
+.tl .dot { width: 34px; height: 34px; border-radius: 50%; background: var(--nv); color: #000; display: grid; place-items: center; font-size: 20px; flex: none; margin-top: 2px; }
+.tl .dot.spin { background: transparent; color: var(--nv); font-size: 32px; }
+.tl .name { font-size: 24px; font-weight: 800; }
+.tl .name span { font-size: 16px; font-weight: 500; color: var(--muted); margin-left: 10px; }
+.tl .call { margin-top: 8px; border: 1px solid var(--line); border-radius: 10px; background: rgba(7,11,18,.7); padding: 10px 14px; font-size: 16px; }
+.tl .call .top { display: flex; gap: 10px; align-items: center; }
+.tl .call .src { font-size: 13px; font-weight: 700; background: #1e2a3d; color: #cbd5e1; border-radius: 6px; padding: 3px 8px; font-family: Pretendard; }
+.tl .call .src.nv { background: rgba(118,185,0,.18); color: var(--nv-light); }
+.tl .call .fn { color: #7dd3fc; }
+.tl .call .ms { margin-left: auto; color: var(--muted); font-size: 13px; }
+.tl .call .res { margin-top: 6px; color: #e2e8f0; font-family: Pretendard; font-size: 18px; }
+#s3 .kpis { position: absolute; left: 1090px; top: 190px; width: 720px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.kpi { padding: 24px 28px; height: 200px; }
+.kpi .k { font-size: 16px; letter-spacing: .12em; color: var(--muted); font-weight: 700; }
+.kpi .v { font-size: 110px; font-weight: 800; line-height: 1.05; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.kpi .d { font-size: 20px; color: var(--muted); }
+#s3 .solver { position: absolute; left: 1090px; top: 860px; width: 720px; height: 150px; padding: 22px 28px; }
+#s3 .solver .o { font-size: 34px; font-weight: 800; display: flex; align-items: center; gap: 14px; margin-top: 8px; }
+#s3 .solver .o svg { color: var(--nv); }
+#s3 .solver .m { font-size: 16px; color: var(--muted); margin-top: 8px; }
+
+/* S4 */
+#s4 .quote { position: absolute; left: 0; right: 0; top: 150px; text-align: center; font-size: 76px; font-weight: 800; letter-spacing: -0.02em; }
+#s4 .quote em { font-style: normal; color: var(--nv); }
+#s4 .sub { position: absolute; left: 0; right: 0; top: 262px; text-align: center; font-size: 30px; color: var(--muted); }
+#s4 .tbl { position: absolute; left: 330px; right: 330px; top: 370px; padding: 30px 46px; }
+#s4 .th, #s4 .tr { display: grid; grid-template-columns: 1fr 220px 80px 220px; align-items: center; }
+#s4 .th { font-size: 18px; letter-spacing: .12em; color: var(--muted); font-weight: 700; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+#s4 .th .r { color: var(--nv); }
+#s4 .tr { font-size: 38px; font-weight: 700; padding: 30px 0; border-bottom: 1px solid var(--line); }
+#s4 .tr:last-child { border-bottom: none; }
+#s4 .old { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+#s4 .arr { text-align: center; color: var(--muted); }
+#s4 .new { text-align: right; color: var(--nv-light); font-weight: 800; font-size: 48px; font-variant-numeric: tabular-nums; }
+#s4 .th .old, #s4 .th .new { font-size: 18px; }
+#s4 .note { position: absolute; left: 0; right: 0; top: 960px; text-align: center; font-size: 20px; color: var(--muted); }
+
+/* S5 */
+#s5 .caption { top: 80px; }
+#s5 .ap { position: absolute; left: 150px; top: 230px; width: 820px; padding: 32px 36px; border-color: rgba(167,139,250,.45); box-shadow: 0 0 60px rgba(139,92,246,.12); }
+#s5 .ap .hd { display: flex; justify-content: space-between; align-items: flex-start; }
+#s5 .ap .hd .sub { font-size: 17px; color: var(--muted); margin-top: 6px; }
+#s5 .ap .hd .l { display: flex; gap: 14px; }
+#s5 .ap .hd .l svg { color: var(--nv); font-size: 28px; margin-top: 2px; }
+.pill { font-size: 16px; font-weight: 800; letter-spacing: .08em; border-radius: 999px; padding: 6px 16px; }
+.pill.pending { color: #ddd6fe; background: rgba(139,92,246,.2); border: 1px solid rgba(167,139,250,.5); }
+.pill.approved { color: #000; background: var(--nv); border: 1px solid var(--nv); }
+#s5 .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 26px; }
+#s5 .stat { background: var(--panel2); border-radius: 12px; text-align: center; padding: 18px 0; }
+#s5 .stat .v { font-size: 44px; font-weight: 800; font-variant-numeric: tabular-nums; }
+#s5 .stat .d { font-size: 17px; color: var(--muted); }
+#s5 .who { margin-top: 20px; font-size: 17px; color: var(--muted); }
+#s5 .who b { color: #e2e8f0; font-family: "JetBrains Mono"; font-weight: 400; }
+#s5 .btns { display: flex; gap: 14px; margin-top: 22px; }
+#s5 .approve { flex: 1; height: 76px; border-radius: 12px; background: var(--nv); color: #000; font-size: 28px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 12px; transform-origin: center; }
+#s5 .reject { width: 200px; height: 76px; border-radius: 12px; border: 1px solid rgba(251,113,133,.6); color: var(--rose); font-size: 26px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 10px; }
+#s5 .bypass { margin-top: 14px; border: 1px dashed rgba(251,113,133,.45); border-radius: 12px; text-align: center; padding: 14px; color: #fda4af; font-size: 18px; transform-origin: center; }
+#s5 .blocked { margin-top: 14px; border: 1px solid rgba(251,113,133,.7); background: rgba(244,63,94,.12); border-radius: 12px; padding: 16px 20px; color: #fecdd3; font-size: 22px; display: flex; gap: 12px; align-items: center; }
+#s5 .fr { position: absolute; left: 1010px; top: 230px; width: 760px; padding: 32px 36px; }
+#s5 .fr .hd { display: flex; gap: 14px; }
+#s5 .fr .hd svg { color: var(--nv); font-size: 28px; margin-top: 2px; }
+#s5 .fr .sub { font-size: 17px; color: var(--muted); margin-top: 6px; }
+#s5 .res { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 26px; }
+#s5 .res .c { background: var(--panel2); border-radius: 12px; padding: 18px 20px; height: 150px; }
+#s5 .res .v { font-size: 64px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+#s5 .res .d { font-size: 18px; color: var(--muted); }
+#s5 .fl { display: flex; gap: 12px; margin-top: 22px; }
+#s5 .fl span { border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; font-size: 20px; color: #fff; display: inline-flex; gap: 8px; align-items: center; }
+#s5 .fl span svg { color: var(--nv); }
+#s5 .fl span i { font-style: normal; color: var(--muted); }
+#s5 .appr { margin-top: 22px; font-size: 20px; color: var(--muted); }
+#s5 .appr b { color: #fff; font-family: "JetBrains Mono"; font-weight: 400; }
+
+/* S6 */
+#s6 .logo { position: absolute; left: 0; right: 0; top: 270px; display: flex; justify-content: center; align-items: center; gap: 36px; }
+#s6 .mark { width: 150px; height: 150px; border-radius: 34px; background: linear-gradient(135deg, var(--nv), #047857); display: grid; place-items: center; color: #000; font-size: 86px; box-shadow: 0 20px 80px rgba(118,185,0,.3); }
+#s6 .name { font-size: 150px; font-weight: 800; letter-spacing: -0.04em; }
+#s6 .name span { color: var(--nv); }
+#s6 .tag { position: absolute; left: 0; right: 0; top: 480px; text-align: center; font-size: 44px; font-weight: 700; color: #e2e8f0; }
+#s6 .chips { position: absolute; left: 0; right: 0; top: 590px; display: flex; justify-content: center; gap: 16px; }
+#s6 .chips span { border: 1px solid rgba(118,185,0,.4); background: rgba(118,185,0,.08); color: var(--nv-light); border-radius: 12px; padding: 12px 24px; font-size: 26px; font-weight: 700; }
+#s6 .run { position: absolute; left: 50%; top: 730px; transform: translateX(-50%); border: 1px solid var(--line); background: var(--panel); border-radius: 14px; padding: 18px 34px; font-size: 32px; white-space: nowrap; }
+#s6 .run .p { color: var(--nv); }
+#s6 .run .a { color: var(--muted); }
+#s6 .foot { position: absolute; left: 0; right: 0; top: 880px; text-align: center; font-size: 22px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="glow"></div>
+  <div id="grid"></div>
+
+  <!-- S1 hook -->
+  <section class="scene" id="s1">
+    <div class="wrap">
+      <div class="dis" id="s1dis"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="12" cy="12" r="10" />
+  <line x1="12" x2="12" y1="8" y2="12" />
+  <line x1="12" x2="12.01" y1="16" y2="16" />
+</svg> DISRUPTION</div>
+      <div class="flight" id="s1flight">KE123</div>
+      <div class="route" id="s1route">ICN <svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" />
+</svg> NRT</div>
+    </div>
+    <div class="badge" id="s1badge">CANCELLED</div>
+    <div class="line" id="s1line">결항 한 건. 승객 <b>35명</b>.</div>
+    <div class="reason mono" id="s1reason">Aircraft technical issue (AOG - hydraulic system) at ICN · A321neo · STD 10:00</div>
+  </section>
+
+  <!-- S2 command -->
+  <section class="scene" id="s2">
+    <div class="caption" id="s2cap">운영자는 <em>한 문장</em>만 입력합니다</div>
+    <div class="steps" id="s2steps">
+      <div class="step" data-i="0"><div class="ic"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z" />
+</svg></div><div><div class="t">① 목표 한 문장</div><div class="s">운영자가 자연어로 지시</div></div></div>
+      <div class="step" data-i="1"><div class="ic"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M12 8V4H8" />
+  <rect width="16" height="12" x="4" y="8" rx="2" />
+  <path d="M2 14h2" />
+  <path d="M20 14h2" />
+  <path d="M15 13v2" />
+  <path d="M9 13v2" />
+</svg></div><div><div class="t">② 자율 계획 · 도구 실행</div><div class="s">Nemotron이 도구를 골라 호출</div></div></div>
+      <div class="step" data-i="2"><div class="ic"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M12 20v2" />
+  <path d="M12 2v2" />
+  <path d="M17 20v2" />
+  <path d="M17 2v2" />
+  <path d="M2 12h2" />
+  <path d="M2 17h2" />
+  <path d="M2 7h2" />
+  <path d="M20 12h2" />
+  <path d="M20 17h2" />
+  <path d="M20 7h2" />
+  <path d="M7 20v2" />
+  <path d="M7 2v2" />
+  <rect x="4" y="4" width="16" height="16" rx="2" />
+  <rect x="8" y="8" width="8" height="8" rx="1" />
+</svg></div><div><div class="t">③ 규정 기반 최적화</div><div class="s">RAG 규정 → cuOpt MILP</div></div></div>
+      <div class="step" data-i="3"><div class="ic"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="m16 11 2 2 4-4" />
+  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+  <circle cx="9" cy="7" r="4" />
+</svg></div><div><div class="t">④ 사람 승인</div><div class="s">승인 전 예약 변경 불가</div></div></div>
+      <div class="step" data-i="4"><div class="ic"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M21.801 10A10 10 0 1 1 17 3.335" />
+  <path d="m9 11 3 3L22 4" />
+</svg></div><div><div class="t">⑤ 실행 · 감사 로그</div><div class="s">Booking API + Audit</div></div></div>
+    </div>
+    <div class="cmd panel" id="s2cmd">
+      <div class="row">
+        <div class="input" id="s2input"><span class="ops mono">ops&gt;</span><span id="s2text"></span><span class="caret" id="s2caret"></span><span class="enter"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 4v7a4 4 0 0 1-4 4H4" />
+  <path d="m9 10-5 5 5 5" />
+</svg></span></div>
+        <div class="btn" id="s2btn"><span id="s2btnic"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
+</svg></span><span id="s2btnt">Run Agent</span></div>
+      </div>
+      <div class="chips">시나리오: <span class="chip on">KE123 결항 · 35명</span><span class="chip">KE125 45분 지연</span><span class="chip">존재하지 않는 편 (ZZ999)</span></div>
+    </div>
+  </section>
+
+  <!-- S3 agent -->
+  <section class="scene" id="s3">
+    <div class="caption" id="s3cap">규정은 에이전트가 찾고, 배정은 <em>cuOpt</em>가 계산합니다</div>
+    <div class="act panel" id="s3act">
+      <div class="hd">
+        <div><div class="label"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" />
+  <path d="M20 2v4" />
+  <path d="M22 4h-4" />
+  <circle cx="4" cy="20" r="2" />
+</svg> Agent Activity</div><div class="sub">Nemotron plans → tools execute → every step is logged</div></div>
+        <div class="tc mono" id="s3tc">0 tool calls</div>
+      </div>
+      <div id="s3tl"></div>
+    </div>
+    <div class="kpis" id="s3kpis">
+      <div class="kpi panel"><div class="k">AFFECTED</div><div class="v" id="k0" style="color:#fff">0</div><div class="d">영향 승객</div></div>
+      <div class="kpi panel"><div class="k">AUTO-ASSIGNED</div><div class="v" id="k1" style="color:var(--nv-light)">0</div><div class="d">자동 배정</div></div>
+      <div class="kpi panel"><div class="k">MANUAL REVIEW</div><div class="v" id="k2" style="color:var(--amber)">0</div><div class="d">운영자 검토</div></div>
+      <div class="kpi panel"><div class="k">NO FEASIBLE</div><div class="v" id="k3" style="color:var(--rose)">0</div><div class="d">대안 없음</div></div>
+    </div>
+    <div class="solver panel" id="s3solver">
+      <div class="k label" style="font-size:15px;color:var(--muted)">Solver</div>
+      <div class="o"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M12 20v2" />
+  <path d="M12 2v2" />
+  <path d="M17 20v2" />
+  <path d="M17 2v2" />
+  <path d="M2 12h2" />
+  <path d="M2 17h2" />
+  <path d="M2 7h2" />
+  <path d="M20 12h2" />
+  <path d="M20 17h2" />
+  <path d="M20 7h2" />
+  <path d="M7 20v2" />
+  <path d="M7 2v2" />
+  <rect x="4" y="4" width="16" height="16" rx="2" />
+  <rect x="8" y="8" width="8" height="8" rx="1" />
+</svg> OPTIMAL <span class="mono" style="font-size:22px;color:var(--muted);font-weight:400">· 0-1 MILP</span></div>
+      <div class="m mono">148 binary vars × 41 constraints · objective 115,367.5</div>
+    </div>
+  </section>
+
+  <!-- S4 claim -->
+  <section class="scene" id="s4">
+    <div class="quote" id="s4q">LLM does <em>not</em> decide passenger allocation.</div>
+    <div class="sub" id="s4sub">같은 허용 항공편에서, 선착순 수작업과 비교하면</div>
+    <div class="tbl panel" id="s4tbl">
+      <div class="th"><div>METRIC</div><div class="old">선착순 수작업</div><div></div><div class="new r">REROUTE</div></div>
+      <div class="tr"><div>연결편 놓침</div><div class="old">4</div><div class="arr">→</div><div class="new">0</div></div>
+      <div class="tr"><div>특수지원 승객 규정 위반</div><div class="old">2</div><div class="arr">→</div><div class="new">0</div></div>
+      <div class="tr"><div>VIP 평균 지연</div><div class="old">5h 40m</div><div class="arr">→</div><div class="new">4h 00m</div></div>
+    </div>
+  </section>
+
+  <!-- S5 approval -->
+  <section class="scene" id="s5">
+    <div class="caption" id="s5cap">예약 변경은 <em>사람이 승인</em>해야만</div>
+    <div class="ap panel" id="s5ap">
+      <div class="hd">
+        <div class="l"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="m14 13-8.381 8.38a1 1 0 0 1-3.001-3l8.384-8.381" />
+  <path d="m16 16 6-6" />
+  <path d="m21.5 10.5-8-8" />
+  <path d="m8 8 6-6" />
+  <path d="m8.5 7.5 8 8" />
+</svg><div><div class="label">Human Approval</div><div class="sub">Business authorization boundary — enforced by the backend</div></div></div>
+        <div class="pill pending" id="s5pill">PENDING</div>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="v" style="color:var(--nv-light)">31</div><div class="d">auto rebook</div></div>
+        <div class="stat"><div class="v" style="color:var(--nv-light)">+0</div><div class="d">reviewed items</div></div>
+        <div class="stat"><div class="v mono" id="s5timer" style="font-size:40px">29:59</div><div class="d">expires</div></div>
+      </div>
+      <div class="who">requested by <b>reroute-agent</b> · approver <b>ops.controller.kim</b></div>
+      <div class="btns">
+        <div class="approve" id="s5approve"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="12" cy="12" r="10" />
+  <path d="m16 9-5.5 5.5L8 12" />
+</svg> Approve Plan</div>
+        <div class="reject"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="12" cy="12" r="10" />
+  <path d="m15 9-6 6" />
+  <path d="m9 9 6 6" />
+</svg> Reject</div>
+      </div>
+      <div class="bypass" id="s5bypass"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+  <path d="M12 8v4" />
+  <path d="M12 16h.01" />
+</svg> 보안 데모: 승인 없이 execute API 직접 호출해보기</div>
+      <div class="blocked mono" id="s5blocked"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="12" cy="12" r="10" />
+  <path d="M4.929 4.929 19.07 19.071" />
+</svg> HTTP 403 — APPROVAL_REQUIRED → blocked &amp; audited</div>
+    </div>
+    <div class="fr panel" id="s5fr">
+      <div class="hd"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+  <path d="m9 14 2 2 4-4" />
+</svg><div><div class="label">Final Report</div><div class="sub">Bookings re-issued through the Airline Booking API</div></div></div>
+      <div class="res">
+        <div class="c"><div class="v" id="r0" style="color:var(--nv-light)">0</div><div class="d">rebooked</div></div>
+        <div class="c"><div class="v" style="color:var(--amber)">2</div><div class="d">held for operator</div></div>
+        <div class="c"><div class="v" style="color:var(--rose)">1</div><div class="d">alternative handling</div></div>
+        <div class="c"><div class="v">0</div><div class="d">failed</div></div>
+      </div>
+      <div class="fl" id="s5fl"><span><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M2 22h20" />
+  <path d="M6.36 17.4 4 17l-2-4 1.1-.55a2 2 0 0 1 1.8 0l.17.1a2 2 0 0 0 1.8 0L8 12 5 6l.9-.45a2 2 0 0 1 2.09.2l4.02 3a2 2 0 0 0 2.1.2l4.19-2.06a2.41 2.41 0 0 1 1.73-.17L21 7a1.4 1.4 0 0 1 .87 1.99l-.38.76c-.23.46-.6.84-1.07 1.08L7.58 17.2a2 2 0 0 1-1.22.18Z" />
+</svg> KE701 <i>12 pax</i></span><span><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M2 22h20" />
+  <path d="M6.36 17.4 4 17l-2-4 1.1-.55a2 2 0 0 1 1.8 0l.17.1a2 2 0 0 0 1.8 0L8 12 5 6l.9-.45a2 2 0 0 1 2.09.2l4.02 3a2 2 0 0 0 2.1.2l4.19-2.06a2.41 2.41 0 0 1 1.73-.17L21 7a1.4 1.4 0 0 1 .87 1.99l-.38.76c-.23.46-.6.84-1.07 1.08L7.58 17.2a2 2 0 0 1-1.22.18Z" />
+</svg> KE703 <i>17 pax</i></span><span><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M2 22h20" />
+  <path d="M6.36 17.4 4 17l-2-4 1.1-.55a2 2 0 0 1 1.8 0l.17.1a2 2 0 0 0 1.8 0L8 12 5 6l.9-.45a2 2 0 0 1 2.09.2l4.02 3a2 2 0 0 0 2.1.2l4.19-2.06a2.41 2.41 0 0 1 1.73-.17L21 7a1.4 1.4 0 0 1 .87 1.99l-.38.76c-.23.46-.6.84-1.07 1.08L7.58 17.2a2 2 0 0 1-1.22.18Z" />
+</svg> OZ102 <i>3 pax</i></span></div>
+      <div class="appr">승인 by <b>ops.controller.kim</b> · 감사 로그 기록됨</div>
+    </div>
+  </section>
+
+  <!-- S6 outro -->
+  <section class="scene" id="s6">
+    <div class="logo" id="s6logo"><div class="mark"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  
+  
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="m10.586 5.414-5.172 5.172" />
+  <path d="m18.586 13.414-5.172 5.172" />
+  <path d="M6 12h12" />
+  <circle cx="12" cy="20" r="2" />
+  <circle cx="12" cy="4" r="2" />
+  <circle cx="20" cy="12" r="2" />
+  <circle cx="4" cy="12" r="2" />
+</svg></div><div class="name">Re<span>Route</span></div></div>
+    <div class="tag" id="s6tag">자율 항공 비정상운항 복구 에이전트</div>
+    <div class="chips" id="s6chips"><span>Nemotron · NIM</span><span>NeMo Retriever</span><span>cuOpt</span><span>OpenShell</span></div>
+    <div class="run mono" id="s6run"><span class="p">$</span> docker compose up <span class="a">→ localhost:3000</span></div>
+    <div class="foot" id="s6foot">NVIDIA Korea Agentic AI Hackathon</div>
+  </section>
+
+  <svg id="cursor" viewBox="0 0 24 24"><path d="M4 2 L4 20 L9 15.5 L12.5 22.5 L15.5 21 L12 14 L19 14 Z" fill="#fff" stroke="#000" stroke-width="1.3" stroke-linejoin="round"/></svg>
+  <div id="ripple"></div>
+</div>
+
+<script>
+const ICON = {"alert-circle":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <circle cx=\"12\" cy=\"12\" r=\"10\" />\n  <line x1=\"12\" x2=\"12\" y1=\"8\" y2=\"12\" />\n  <line x1=\"12\" x2=\"12.01\" y1=\"16\" y2=\"16\" />\n</svg>","plane":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z\" />\n</svg>","message-square":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z\" />\n</svg>","bot":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M12 8V4H8\" />\n  <rect width=\"16\" height=\"12\" x=\"4\" y=\"8\" rx=\"2\" />\n  <path d=\"M2 14h2\" />\n  <path d=\"M20 14h2\" />\n  <path d=\"M15 13v2\" />\n  <path d=\"M9 13v2\" />\n</svg>","cpu":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M12 20v2\" />\n  <path d=\"M12 2v2\" />\n  <path d=\"M17 20v2\" />\n  <path d=\"M17 2v2\" />\n  <path d=\"M2 12h2\" />\n  <path d=\"M2 17h2\" />\n  <path d=\"M2 7h2\" />\n  <path d=\"M20 12h2\" />\n  <path d=\"M20 17h2\" />\n  <path d=\"M20 7h2\" />\n  <path d=\"M7 20v2\" />\n  <path d=\"M7 2v2\" />\n  <rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"2\" />\n  <rect x=\"8\" y=\"8\" width=\"8\" height=\"8\" rx=\"1\" />\n</svg>","user-check":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"m16 11 2 2 4-4\" />\n  <path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\" />\n  <circle cx=\"9\" cy=\"7\" r=\"4\" />\n</svg>","circle-check-big":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M21.801 10A10 10 0 1 1 17 3.335\" />\n  <path d=\"m9 11 3 3L22 4\" />\n</svg>","corner-down-left":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M20 4v7a4 4 0 0 1-4 4H4\" />\n  <path d=\"m9 10-5 5 5 5\" />\n</svg>","play":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\" />\n</svg>","sparkles":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z\" />\n  <path d=\"M20 2v4\" />\n  <path d=\"M22 4h-4\" />\n  <circle cx=\"4\" cy=\"20\" r=\"2\" />\n</svg>","gavel":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"m14 13-8.381 8.38a1 1 0 0 1-3.001-3l8.384-8.381\" />\n  <path d=\"m16 16 6-6\" />\n  <path d=\"m21.5 10.5-8-8\" />\n  <path d=\"m8 8 6-6\" />\n  <path d=\"m8.5 7.5 8 8\" />\n</svg>","circle-check":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <circle cx=\"12\" cy=\"12\" r=\"10\" />\n  <path d=\"m16 9-5.5 5.5L8 12\" />\n</svg>","circle-x":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <circle cx=\"12\" cy=\"12\" r=\"10\" />\n  <path d=\"m15 9-6 6\" />\n  <path d=\"m9 9 6 6\" />\n</svg>","shield-alert":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z\" />\n  <path d=\"M12 8v4\" />\n  <path d=\"M12 16h.01\" />\n</svg>","ban":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <circle cx=\"12\" cy=\"12\" r=\"10\" />\n  <path d=\"M4.929 4.929 19.07 19.071\" />\n</svg>","clipboard-check":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <rect width=\"8\" height=\"4\" x=\"8\" y=\"2\" rx=\"1\" ry=\"1\" />\n  <path d=\"M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2\" />\n  <path d=\"m9 14 2 2 4-4\" />\n</svg>","plane-takeoff":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M2 22h20\" />\n  <path d=\"M6.36 17.4 4 17l-2-4 1.1-.55a2 2 0 0 1 1.8 0l.17.1a2 2 0 0 0 1.8 0L8 12 5 6l.9-.45a2 2 0 0 1 2.09.2l4.02 3a2 2 0 0 0 2.1.2l4.19-2.06a2.41 2.41 0 0 1 1.73-.17L21 7a1.4 1.4 0 0 1 .87 1.99l-.38.76c-.23.46-.6.84-1.07 1.08L7.58 17.2a2 2 0 0 1-1.22.18Z\" />\n</svg>","waypoints":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"m10.586 5.414-5.172 5.172\" />\n  <path d=\"m18.586 13.414-5.172 5.172\" />\n  <path d=\"M6 12h12\" />\n  <circle cx=\"12\" cy=\"20\" r=\"2\" />\n  <circle cx=\"12\" cy=\"4\" r=\"2\" />\n  <circle cx=\"20\" cy=\"12\" r=\"2\" />\n  <circle cx=\"4\" cy=\"12\" r=\"2\" />\n</svg>","check":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M20 6 9 17l-5-5\" />\n</svg>","loader-circle":"<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  \n  \n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M21 12a9 9 0 1 1-6.219-8.56\" />\n</svg>"};
+const $ = (id) => document.getElementById(id);
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+const eo = (x) => 1 - Math.pow(1 - x, 3);            // ease-out cubic
+const eio = (x) => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const back = (x) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const lerp = (a, b, x) => a + (b - a) * x;
+
+// element enters (fade + rise) at time a over d seconds
+function enter(el, t, a, d = .5, dy = 30) {
+  const p = eo(prog(t, a, a + d));
+  el.style.opacity = p;
+  el.style.transform = `translateY(${(1 - p) * dy}px)`;
+  return p;
+}
+// scene visibility: in over [a, a+.35], out over [b-.3, b] (content drifts up and fades — dips through bg)
+function scene(el, t, a, b) {
+  const pin = eo(prog(t, a, a + .35));
+  const pout = prog(t, b - .3, b);
+  const on = t >= a && t < b;
+  el.style.display = on ? 'block' : 'none';
+  el.style.opacity = on ? pin * (1 - pout) : 0;
+  el.style.transform = `translateY(${-pout * 24}px) scale(${1 - pout * .015})`;
+}
+function cursorAt(t, keys) {  // keys: [time, x, y]
+  const c = $('cursor');
+  if (t < keys[0][0] - .2 || t > keys[keys.length - 1][0] + .35) { c.style.opacity = 0; return; }
+  let x = keys[0][1], y = keys[0][2];
+  for (let i = 0; i < keys.length - 1; i++) {
+    const [ta, xa, ya] = keys[i], [tb, xb, yb] = keys[i + 1];
+    if (t >= ta && t <= tb) { const p = eio(prog(t, ta, tb)); x = lerp(xa, xb, p); y = lerp(ya, yb, p); }
+    if (t > tb) { x = xb; y = yb; }
+  }
+  const fi = prog(t, keys[0][0] - .2, keys[0][0]) * (1 - prog(t, keys[keys.length - 1][0] + .1, keys[keys.length - 1][0] + .35));
+  c.style.opacity = fi;
+  c.style.transform = `translate(${x}px, ${y}px)`;
+}
+function ripple(t, tc, x, y) {
+  const r = $('ripple');
+  const p = prog(t, tc, tc + .45);
+  if (t < tc || p >= 1) return false;
+  r.style.opacity = (1 - p) * .9;
+  r.style.transform = `translate(${x - 40}px, ${y - 40}px) scale(${.3 + p * 1.2})`;
+  return true;
+}
+const press = (t, tc) => 1 - .05 * Math.sin(Math.PI * prog(t, tc - .08, tc + .14));
+
+// S2 typing
+const CMD = 'KE123편이 결항됐어. 영향 승객을 확인하고 최적 재배정안을 만들어줘.';
+
+// S3 timeline data (from the real agent run)
+const TL = [
+  { at: 6.95, name: '목표 수신', sub: 'Goal received' },
+  { at: 7.35, name: '결항 분석', sub: 'Analyzing disruption', src: 'Airline API', fn: 'get_disrupted_flight()', ms: '104 ms', res: '✓ KE123 ICN→NRT CANCELLED · AOG hydraulic system' },
+  { at: 7.8, name: '영향 승객 조회', sub: 'Fetching passengers', src: 'Airline API', fn: 'get_affected_passengers()', ms: '98 ms', res: '✓ 35 affected · 3 VIP · 5 connections · 2 SSR' },
+  { at: 8.25, name: '대체편 탐색', sub: 'Searching alternatives', src: 'Airline API', fn: 'search_alternative_flights()', ms: '93 ms', res: '✓ 7 alternative flights · 139 open seats' },
+  { at: 8.7, name: '규정 검색 (RAG)', sub: 'Retrieving policies', src: 'NeMo Retriever', nv: true, fn: 'search_rebooking_policy()', res: '✓ 14 policies · MCT-002 · IROP-001 · SSR-001 · VIP-001' },
+  { at: 9.15, name: '재배정 최적화', sub: 'Optimizing', src: 'cuOpt', nv: true, fn: 'optimize_rebooking()', res: '✓ OPTIMAL · 31 auto · 3 review · 1 no feasible' },
+];
+function buildTL() {
+  $('s3tl').innerHTML = TL.map((s, i) => `
+    <div class="tl" id="tl${i}">
+      <div class="dot" id="tld${i}">${ICON['check']}</div>
+      <div style="flex:1">
+        <div class="name">${s.name}<span>${s.sub}</span></div>
+        ${s.fn ? `<div class="call mono"><div class="top"><span class="src ${s.nv ? 'nv' : ''}">${s.src}</span><span class="fn">${s.fn}</span>${s.ms ? `<span class="ms">${s.ms}</span>` : ''}</div><div class="res">${s.res}</div></div>` : ''}
+      </div>
+    </div>`).join('');
+}
+buildTL();
+
+function count(el, t, a, d, to) { el.textContent = Math.round(eo(prog(t, a, a + d)) * to); }
+
+window.render = function (t) {
+  // ambient drift
+  $('glow').style.transform = `translate(${Math.sin(t * .25) * 40}px, ${Math.cos(t * .2) * 30}px)`;
+  $('ripple').style.opacity = 0;
+
+  // ---------- S1 0–3.0
+  scene($('s1'), t, 0, 3.0);
+  if (t < 3.0) {
+    $('s1').style.opacity = t < .35 ? 1 : $('s1').style.opacity;  // no fade on first frame; elements animate in
+    enter($('s1dis'), t, .05, .5, 16);
+    const pf = eo(prog(t, .1, .7));
+    $('s1flight').style.opacity = pf;
+    $('s1flight').style.transform = `scale(${1.08 - .08 * pf})`;
+    $('s1flight').style.letterSpacing = `${-0.04 + (1 - pf) * .06}em`;
+    enter($('s1route'), t, .4, .5, 20);
+    const pb = prog(t, .85, 1.15);
+    const b = $('s1badge');
+    b.style.opacity = pb > 0 ? 1 : 0;
+    b.style.transform = `rotate(-8deg) scale(${pb > 0 ? lerp(1.9, 1, back(pb)) : 1.9})`;
+    // stamp shake
+    const sh = prog(t, 1.1, 1.4);
+    $('s1flight').style.transform += sh > 0 && sh < 1 ? ` translateX(${Math.sin(sh * 40) * 6 * (1 - sh)}px)` : '';
+    enter($('s1line'), t, 1.35, .45, 24);
+    enter($('s1reason'), t, 1.6, .5, 10);
+  }
+
+  // ---------- S2 3.0–6.6
+  scene($('s2'), t, 3.0, 6.6);
+  if (t >= 3.0 && t < 6.6) {
+    enter($('s2cap'), t, 3.1, .45, 20);
+    enter($('s2steps'), t, 3.25, .45, 20);
+    enter($('s2cmd'), t, 3.3, .45, 30);
+    const n = Math.floor(prog(t, 3.6, 5.1) * CMD.length);
+    $('s2text').textContent = CMD.slice(0, n);
+    $('s2input').classList.toggle('focus', t < 5.75);
+    $('s2caret').style.opacity = t < 5.75 && (n < CMD.length || Math.floor(t * 3) % 2 === 0) ? 1 : 0;
+    // cursor: enters bottom right, glides to Run Agent, clicks at 5.6
+    cursorAt(t, [[5.0, 1900, 900], [5.5, 1600, 505]]);
+    const clicked = t >= 5.6;
+    const btn = $('s2btn');
+    btn.classList.toggle('busy', clicked);
+    btn.style.transform = `scale(${press(t, 5.6)})`;
+    $('s2btnt').textContent = clicked ? 'Agent running…' : 'Run Agent';
+    $('s2btnic').innerHTML = clicked ? ICON['loader-circle'] : ICON['play'];
+    $('s2btnic').style.display = 'inline-block';
+    $('s2btnic').style.transform = clicked ? `rotate(${(t - 5.6) * 540}deg)` : 'none';
+    ripple(t, 5.6, 1612, 512);
+    const active = clicked ? 1 : 0;
+    document.querySelectorAll('#s2 .step').forEach((s, i) => {
+      s.classList.toggle('on', i === active);
+      s.classList.toggle('off', i > active);
+    });
+  }
+
+  // ---------- S3 6.6–11.0
+  scene($('s3'), t, 6.6, 11.0);
+  if (t >= 6.6 && t < 11.0) {
+    enter($('s3cap'), t, 6.7, .45, 20);
+    enter($('s3act'), t, 6.75, .45, 30);
+    enter($('s3kpis'), t, 6.85, .45, 30);
+    let calls = 0;
+    TL.forEach((s, i) => {
+      const el = $('tl' + i);
+      const p = eo(prog(t, s.at, s.at + .35));
+      el.style.opacity = p;
+      el.style.transform = `translateX(${(1 - p) * 30}px)`;
+      el.style.display = t >= s.at - .01 ? 'flex' : 'none';
+      const done = t >= s.at + .3;
+      const d = $('tld' + i);
+      d.className = 'dot' + (done ? '' : ' spin');
+      d.innerHTML = done ? ICON['check'] : ICON['loader-circle'];
+      if (!done) d.firstChild.style.transform = `rotate(${t * 540}deg)`;
+      if (done && s.fn) calls += (i === 4 ? 6 : 1);  // RAG step runs several searches
+    });
+    // keep newest steps in view: scroll timeline up once it overflows
+    const scroll = eio(prog(t, 8.8, 9.4)) * 190;
+    $('s3tl').style.transform = `translateY(${-scroll}px)`;
+    $('s3tc').textContent = `${calls} tool calls`;
+    count($('k0'), t, 8.05, .5, 35);
+    count($('k1'), t, 9.5, .7, 31);
+    count($('k2'), t, 9.6, .6, 3);
+    count($('k3'), t, 9.7, .5, 1);
+    enter($('s3solver'), t, 9.45, .45, 20);
+  }
+
+  // ---------- S4 11.0–15.0
+  scene($('s4'), t, 11.0, 15.0);
+  if (t >= 11.0 && t < 15.0) {
+    enter($('s4q'), t, 11.1, .55, 26);
+    enter($('s4sub'), t, 11.5, .45, 16);
+    enter($('s4tbl'), t, 11.7, .45, 30);
+    document.querySelectorAll('#s4 .tr').forEach((r, i) => {
+      const a = 11.95 + i * .3;
+      const p = eo(prog(t, a, a + .4));
+      r.style.opacity = p;
+      r.style.transform = `translateX(${(1 - p) * -24}px)`;
+      const nw = r.querySelector('.new');
+      const pn = back(prog(t, a + .25, a + .6));
+      nw.style.transform = `scale(${t < a + .25 ? .6 : lerp(.6, 1, pn)})`;
+      nw.style.opacity = prog(t, a + .25, a + .4);
+    });
+  }
+
+  // ---------- S5 15.0–18.2
+  scene($('s5'), t, 15.0, 18.2);
+  if (t >= 15.0 && t < 18.2) {
+    enter($('s5cap'), t, 15.05, .4, 20);
+    enter($('s5ap'), t, 15.1, .45, 30);
+    const secs = 29 * 60 + 59 - Math.floor(Math.max(0, t - 15.1));
+    $('s5timer').textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+    // bypass click at 15.55 -> 403
+    cursorAt(t, [[15.3, 1000, 820], [15.5, 560, 840], [16.25, 560, 840], [16.5, 420, 700]]);
+    $('s5bypass').style.transform = `scale(${press(t, 15.55)})`;
+    ripple(t, 15.55, 570, 850);
+    const pb = prog(t, 15.62, 15.82);
+    $('s5blocked').style.display = t >= 15.62 ? 'flex' : 'none';
+    $('s5blocked').style.opacity = pb;
+    $('s5blocked').style.transform = `translateX(${Math.sin(pb * 18) * 8 * (1 - pb)}px)`;
+    // approve click at 16.55
+    ripple(t, 16.55, 432, 712);
+    $('s5approve').style.transform = `scale(${press(t, 16.55)})`;
+    const ok = t >= 16.6;
+    $('s5pill').className = 'pill ' + (ok ? 'approved' : 'pending');
+    $('s5pill').textContent = ok ? 'APPROVED' : 'PENDING';
+    $('s5approve').innerHTML = (ok ? ICON['check'] + ' Approved' : ICON['circle-check'] + ' Approve Plan');
+    enter($('s5fr'), t, 16.75, .45, 30);
+    count($('r0'), t, 16.9, .6, 32);
+  }
+
+  // ---------- S6 18.2–21.0
+  scene($('s6'), t, 18.2, 21.2);
+  if (t >= 18.2) {
+    const pl = eo(prog(t, 18.3, 18.9));
+    $('s6logo').style.opacity = pl;
+    $('s6logo').style.transform = `scale(${lerp(.92, 1, pl)})`;
+    enter($('s6tag'), t, 18.6, .45, 20);
+    enter($('s6chips'), t, 18.85, .45, 20);
+    const pr = eo(prog(t, 19.1, 19.55));
+    $('s6run').style.opacity = pr;
+    $('s6run').style.transform = `translateX(-50%) translateY(${(1 - pr) * 20}px)`;
+    enter($('s6foot'), t, 19.3, .45, 10);
+  }
+  if (t < 5.0 || (t > 5.9 && t < 15.1) || t > 16.9) $('cursor').style.opacity = 0;
+};
+
+window.ready = document.fonts.ready.then(() => Promise.all([...document.fonts].map(f => f.load().catch(() => {}))));
+render(0);
+</script>
+</body>
+</html>

@@ -76,10 +76,19 @@ def build_mcp_server(c: Container) -> MCPServer:
         return out
 
     @server.tool()
-    async def open_recovery_task(instruction: str, ctx: Context) -> dict[str, Any]:
+    async def open_recovery_task(instruction: str, ctx: Context, task_id: str | None = None) -> dict[str, Any]:
         """Start a recovery task for an operator instruction (e.g. "KE123 was cancelled, rebook the passengers").
+        If the operator already created the task on the ReRoute dashboard and gave you its id (the message says
+        "ReRoute task_id=..."), pass that task_id to continue it instead of opening a new one.
         Returns the task_id every other tool needs. The task appears live on the ReRoute dashboard."""
-        task_id = orch.open_external_task(instruction, _client_name(ctx), c.runtime_info())
+        if task_id:
+            try:
+                orch.attach_external_task(task_id, _client_name(ctx))
+            except (KeyError, PermissionError) as e:
+                audit(ctx, "open_recovery_task", task_id, "FAILURE", {"error": str(e)})
+                return {"error": str(e).strip('"')}
+        else:
+            task_id = orch.open_external_task(instruction, _client_name(ctx), c.runtime_info())
         audit(ctx, "open_recovery_task", task_id, "SUCCESS", {"instruction": instruction})
         return {"task_id": task_id, "dashboard": dashboard, "next": "call get_disrupted_flight with the flight number"}
 

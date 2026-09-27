@@ -1,4 +1,4 @@
-import type { AgentEvent, AuditEntry, Flight, Plan, ProbeResult, Runtime, SecurityPolicy, Task } from "./types";
+import type { AgentEvent, AuditEntry, Flight, Plan, ProbeResult, Runtime, SecurityPolicy, Task, AgentChoice } from "./types";
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 export const DEFAULT_OPERATOR = "ops.controller.kim";
@@ -22,7 +22,8 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   runtime: () => req<Runtime>("/api/system/runtime"),
-  createTask: (command: string) => req<Task>("/api/agent/tasks", { method: "POST", body: JSON.stringify({ command }) }),
+  createTask: (command: string, agent: AgentChoice = "reroute") =>
+    req<Task>("/api/agent/tasks", { method: "POST", body: JSON.stringify({ command, agent }) }),
   task: (id: string) => req<Task>(`/api/agent/tasks/${id}`),
   tasks: () => req<{ tasks: Task[] }>("/api/agent/tasks"),
   events: (id: string, after = 0) => req<{ events: AgentEvent[] }>(`/api/agent/tasks/${id}/events?stream=false&after=${after}`),

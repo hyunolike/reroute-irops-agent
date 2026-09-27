@@ -1,0 +1,24 @@
+# systemd unit for the OpenClaw bridge on the NemoClaw host.
+# Install (as the user that ran NemoClaw onboarding; replace USER):
+#   sudo install -m 0644 openclaw-bridge.service /etc/systemd/system/openclaw-bridge.service
+#   sudo sed -i "s/__USER__/$USER/g" /etc/systemd/system/openclaw-bridge.service
+#   install -m 0600 /dev/stdin ~/.config/reroute/mcp-token <<< "$REROUTE_MCP_TOKEN"
+#   sudo systemctl daemon-reload && sudo systemctl enable --now openclaw-bridge
+[Unit]
+Description=ReRoute -> OpenClaw (NemoClaw) bridge
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=__USER__
+Environment=HOME=/home/__USER__
+Environment=PATH=/home/__USER__/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=REROUTE_URL=https://d6z72s9r7a9wt.cloudfront.net
+Environment=REROUTE_MCP_TOKEN_FILE=/home/__USER__/.config/reroute/mcp-token
+Environment=NEMOCLAW_SANDBOX=reroute-claw
+ExecStart=/usr/bin/python3 /opt/openclaw-bridge/bridge.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

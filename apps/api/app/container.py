@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Coroutine
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -148,6 +150,22 @@ class Container:
             max_steps=settings.agent_max_steps,
         )
 
+    # OpenClaw bridge (NemoClaw host): last heartbeat, kept in the control-plane process
+    openclaw_bridge: dict[str, Any] | None = None
+    OPENCLAW_STALE_SECONDS = 30
+
+    def openclaw_status(self) -> dict[str, Any]:
+        b = self.openclaw_bridge
+        if b is None:
+            return {"connected": False, "last_seen": None}
+        age = time.time() - b["last_seen"]
+        return {
+            "connected": age < self.OPENCLAW_STALE_SECONDS,
+            "last_seen": datetime.fromtimestamp(b["last_seen"], UTC).isoformat(),
+            "sandbox": b.get("sandbox"),
+            "model": b.get("model"),
+        }
+
     def runtime_info(self) -> dict[str, Any]:
         s = self.settings
         return {
@@ -176,5 +194,6 @@ class Container:
             },
             "approval": {"ttl_minutes": s.approval_ttl_minutes, "required_for": ["execute_rebooking"]},
             "agent": {"execution": s.agent_execution},
+            "openclaw": self.openclaw_status(),
             "tools": [{"name": t, "mutating": self.tools.get(t).mutating} for t in self.tools.names()],
         }

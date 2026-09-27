@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, API_BASE } from "./api";
-import type { AgentEvent, Plan, Task } from "./types";
+import type { AgentEvent, Plan, Task, AgentChoice } from "./types";
 
 const TERMINAL = new Set(["COMPLETED", "FAILED", "REJECTED"]);
 
@@ -88,14 +88,14 @@ export function useAgentTask() {
   );
 
   const run = useCallback(
-    async (command: string) => {
+    async (command: string, agent: AgentChoice = "reroute") => {
       stop();
       setError(null);
       setEvents([]);
       setPlan(null);
       lastSeq.current = 0;
       try {
-        const t = await api.createTask(command);
+        const t = await api.createTask(command, agent);
         taskIdRef.current = t.id;
         setTask(t);
         subscribe(t.id);

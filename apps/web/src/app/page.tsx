@@ -19,7 +19,7 @@ import { WelcomeBoard } from "@/components/WelcomeBoard";
 import { Empty } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAgentTask } from "@/lib/useAgentTask";
-import type { Runtime, Task } from "@/lib/types";
+import type { AgentChoice, Runtime, Task } from "@/lib/types";
 
 const RUNNING = new Set(["RECEIVED", "ANALYZING_DISRUPTION", "FETCHING_PASSENGERS", "SEARCHING_ALTERNATIVES", "RETRIEVING_POLICIES", "OPTIMIZING", "GENERATING_PROPOSAL", "EXECUTING"]);
 
@@ -48,13 +48,16 @@ export default function Dashboard() {
   }, [task?.id]);
 
   useEffect(() => {
-    api.runtime().then(setRuntime).catch(() => setRuntime(null));
+    const load = () => api.runtime().then(setRuntime).catch(() => setRuntime(null));
+    load();
+    const t = setInterval(load, 10000); // keeps the OpenClaw bridge status fresh
+    return () => clearInterval(t);
   }, []);
 
   const onRun = useCallback(
-    (cmd: string) => {
+    (cmd: string, agent: AgentChoice) => {
       setSelectedManual([]);
-      void run(cmd);
+      void run(cmd, agent);
     },
     [run],
   );
@@ -104,7 +107,7 @@ export default function Dashboard() {
           </div>
         )}
         <DemoStepper state={task?.state} />
-        <CommandPanel onRun={onRun} busy={busy} />
+        <CommandPanel onRun={onRun} busy={busy} openclaw={runtime?.openclaw} />
         {error && <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-2 text-sm text-rose-200">API error: {error}</div>}
 
         <div className="grid gap-4 lg:grid-cols-12">

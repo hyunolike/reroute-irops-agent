@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
@@ -22,6 +23,9 @@ class TaskCreate(BaseModel):
     command: str = Field(
         min_length=3, max_length=500, examples=["KE123편이 결항됐어. 영향 승객을 확인하고 최적 재배정안을 만들어줘."]
     )
+    # "openclaw": hand the instruction to OpenClaw in NemoClaw (via the bridge); it plans over MCP with the same
+    # guardrails, and the operator still approves in ReRoute.
+    agent: Literal["reroute", "openclaw"] = "reroute"
 
 
 def task_view(t: AgentTask) -> dict:
@@ -55,6 +59,26 @@ def event_view(e: AgentEvent) -> dict:
 
 @router.post("/tasks", status_code=202)
 async def create_task(body: TaskCreate, c: Container = Depends(get_container)) -> dict:
+    if body.agent == "openclaw":
+        if c.settings.mcp_bearer_token is None:
+            raise HTTPException(409, "OpenClaw is not configured (REROUTE_MCP_TOKEN is not set)")
+        runtime = {
+            **c.runtime_info(),
+            "planner": "external",
+            "planner_client": "OpenClaw (NemoClaw)",
+            "requested_agent": "openclaw",
+        }
+        task = c.repo.create_task(body.command, runtime=runtime)
+        task = c.repo.update_task(task.id, pending="openclaw")  # claimed by the OpenClaw bridge, never by ReRoute's worker
+        c.repo.add_event(
+            task.id,
+            type="PLANNER",
+            state=task.state,
+            component="external-agent",
+            title="Sent to OpenClaw (NemoClaw)" + ("" if c.openclaw_status()["connected"] else " - bridge offline, queued"),
+            detail={"bridge": c.openclaw_status()},
+        )
+        return task_view(task)
     task = c.repo.create_task(body.command, runtime=c.runtime_info())
     if c.settings.agent_execution == "remote":
         task = c.repo.update_task(task.id, pending="run")  # claimed by the sandboxed worker

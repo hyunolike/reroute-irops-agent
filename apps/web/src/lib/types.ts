@@ -46,7 +46,11 @@ export interface Runtime {
   security: { runtime: string; policy_file: string; enforced_by: string };
   approval: { ttl_minutes: number; required_for: string[] };
   tools: { name: string; mutating: boolean }[];
+  /** OpenClaw bridge on the NemoClaw host (heartbeat within the last 30 s = connected) */
+  openclaw?: { connected: boolean; last_seen: string | null; sandbox?: string | null; model?: string | null };
 }
+
+export type AgentChoice = "reroute" | "openclaw";
 
 export interface Task {
   id: string;
@@ -54,7 +58,7 @@ export interface Task {
   state: AgentState;
   flight_no: string | null;
   plan_id: string | null;
-  runtime: Runtime & { planner_fallback?: string; planner?: string; planner_client?: string; delegated_by?: string };
+  runtime: Runtime & { planner_fallback?: string; planner?: string; planner_client?: string; delegated_by?: string; requested_agent?: AgentChoice };
   report: Record<string, any> | null;
   error: string | null;
   created_at: string;
