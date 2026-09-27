@@ -20,6 +20,7 @@
 | Quick links | |
 |---|---|
 | 🎬 Demo in one command | `docker compose up --build` → http://localhost:3000 → **Run Agent** |
+| 🎞️ 21-second launch video | [docs/video/reroute-launch.mp4](docs/video/reroute-launch.mp4) — cancellation → one-sentence command → cuOpt re-accommodation → human approval |
 | 📖 3-minute judge guide | http://localhost:3000/guide · [docs/demo-scenario.md](docs/demo-scenario.md) |
 | 🤖 Agent structure & behaviour (7 diagrams) | [docs/agent.en.md](docs/agent.en.md) · [한국어](docs/agent.md) |
 | 🧭 System architecture (7 Mermaid diagrams) | [docs/architecture.en.md](docs/architecture.en.md) · [한국어](docs/architecture.md) |
