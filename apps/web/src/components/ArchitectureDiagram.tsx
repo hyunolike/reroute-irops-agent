@@ -43,7 +43,7 @@ export function ArchitectureDiagram() {
         </div>
         <Box
           icon={<Bot className="h-4 w-4" />}
-          title="ReRoute Agent (NemoClaw-style governed runtime)"
+          title="ReRoute Agent (worker in an OpenShell sandbox)"
           sub="Nemotron via NIM: 목표 해석 · 계획 · Tool 선택 · 예외 설명 — 오케스트레이터가 스키마/전제조건/단계예산/상태머신을 강제"
           tone="nv"
         />

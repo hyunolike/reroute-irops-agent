@@ -166,6 +166,31 @@ class Container:
             "model": b.get("model"),
         }
 
+    # Remote agent worker: last authenticated call and the security runtime it declared (e.g. "openshell")
+    agent_worker: dict[str, Any] | None = None
+
+    def worker_seen(self, security_runtime: str | None) -> None:
+        declared = security_runtime if security_runtime in ("openshell", "policy-mirror") else None
+        self.agent_worker = {"last_seen": time.time(), "security": declared}
+
+    def worker_status(self) -> dict[str, Any]:
+        w = self.agent_worker
+        if w is None:
+            return {"connected": False, "security": None, "last_seen": None}
+        return {
+            "connected": time.time() - w["last_seen"] < self.OPENCLAW_STALE_SECONDS,
+            "security": w["security"],
+            "last_seen": datetime.fromtimestamp(w["last_seen"], UTC).isoformat(),
+        }
+
+    def agent_security_runtime(self) -> str:
+        """Where ReRoute's agent actually runs: the sandboxed worker's runtime when remote, else this process's."""
+        if self.settings.agent_execution == "remote":
+            w = self.worker_status()
+            if w["connected"] and w["security"]:
+                return w["security"]
+        return self.settings.security_runtime
+
     def runtime_info(self) -> dict[str, Any]:
         s = self.settings
         return {
@@ -185,15 +210,16 @@ class Container:
             },
             "security": {
                 "runtime": s.security_runtime,
+                "agent_runtime": self.agent_security_runtime(),
                 "policy_file": str(s.openshell_policy.relative_to(s.project_root))
                 if s.openshell_policy.is_relative_to(s.project_root)
                 else str(s.openshell_policy),
                 "enforced_by": "NVIDIA OpenShell sandbox"
-                if s.security_runtime == "openshell"
+                if self.agent_security_runtime() == "openshell"
                 else "ReRoute policy mirror (same OpenShell policy file, in-process)",
             },
             "approval": {"ttl_minutes": s.approval_ttl_minutes, "required_for": ["execute_rebooking"]},
-            "agent": {"execution": s.agent_execution},
+            "agent": {"execution": s.agent_execution, "worker": self.worker_status()},
             "openclaw": self.openclaw_status(),
             "tools": [{"name": t, "mutating": self.tools.get(t).mutating} for t in self.tools.names()],
         }

@@ -36,7 +36,12 @@ class AgentWorker:
             raise RuntimeError("AGENT_WORKER_TOKEN is required for the remote agent worker")
         self.settings = settings
         policy = OpenShellPolicy.load(settings.openshell_policy)
-        self.cp = ControlPlaneClient(settings.reroute_api_base_url, settings.agent_worker_token.get_secret_value(), policy)
+        self.cp = ControlPlaneClient(
+            settings.reroute_api_base_url,
+            settings.agent_worker_token.get_secret_value(),
+            policy,
+            security_runtime=settings.security_runtime,
+        )
         audit = RemoteAuditService(self.cp)
         http = GovernedHttpClient(
             policy,

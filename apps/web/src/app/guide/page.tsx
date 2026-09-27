@@ -50,13 +50,19 @@ export default function Guide() {
       tech: "OpenShell",
       role: "Agent 샌드박스: 허용 API만 egress, 자기 승인 엔드포인트 deny_rule, 파일시스템 allow-list, non-root.",
       where: "nvidia/openshell/policies/reroute-agent.yaml",
-      live: <Live on={rt ? rt.security.runtime === "openshell" : undefined} yes="enforced by OpenShell" no="policy mirror (same YAML, in-process)" />,
+      live: (
+        <Live
+          on={rt ? (rt.security.agent_runtime ?? rt.security.runtime) === "openshell" : undefined}
+          yes="agent worker inside OpenShell"
+          no="policy mirror (same YAML, in-process)"
+        />
+      ),
     },
     {
       tech: "NemoClaw · OpenClaw",
-      role: "NemoClaw 샌드박스 안의 OpenClaw가 MCP(/mcp)로 ReRoute 도구를 사용. 같은 가드레일·감사 로그, 승인·실행 도구는 없음(사람만 승인).",
-      where: "apps/api/app/integrations/mcp_server.py · nvidia/nemoclaw/ · nvidia/skills/reroute-irops/SKILL.md",
-      live: <span className="text-ops-muted">MCP server tested · NemoClaw connection: see nvidia/nemoclaw/README.md</span>,
+      role: "NemoClaw 샌드박스 안의 OpenClaw가 MCP(/mcp)로 ReRoute 도구를 사용. 대시보드 입력창에서 OpenClaw를 고르면 브리지가 전달하고, OpenClaw는 같은 작업에 붙어 계획. 같은 가드레일·감사 로그, 승인·실행 도구는 없음(사람만 승인).",
+      where: "apps/api/app/integrations/mcp_server.py · apps/api/app/api/bridge.py · infra/openclaw-bridge/ · nvidia/nemoclaw/",
+      live: <Live on={rt ? !!rt.openclaw?.connected : undefined} yes="OpenClaw connected · 대시보드에서 선택 가능" no="OpenClaw bridge offline (MCP 서버는 동작)" />,
     },
     {
       tech: "NVIDIA Skills",
@@ -171,6 +177,7 @@ min Σ delay·tier + VIP delay + downgrade
           <ol className="list-decimal space-y-1.5 pl-5 text-sm text-slate-300">
             <li>
               Dashboard에서 <b className="text-white">Run Agent</b> — 오른쪽 타임라인에서 Tool 호출과 런타임 배지(Nemotron · NeMo Retriever · cuOpt)를 확인.
+              입력창 위에서 <b className="text-white">OpenClaw (NemoClaw)</b>를 고르면 같은 작업을 외부 에이전트가 MCP로 계획합니다(점이 초록색일 때).
             </li>
             <li>KPI: 35명 → 자동 31 · 검토 3 · 대안 없음 1. “Why an optimizer?”에서 선착순 대비 연결편 놓침 4→0, SSR 위반 2→0.</li>
             <li>Allocation 표에서 강도윤 승객의 사유: 7C1102는 연결을 살리지만 IROP-002(무협정 항공사)로 차단 → 운영자 판단 필요. 정책 칩을 hover하면 근거 문서가 강조됨.</li>
@@ -199,7 +206,8 @@ min Σ delay·tier + VIP delay + downgrade
                 ["Reasoning", "LLM_PROVIDER=auto + NVIDIA_API_KEY → Nemotron via NIM chooses every tool", "no key (or LLM_PROVIDER=mock) → scripted planner (same tools, same guardrails, warning banner)"],
                 ["Retrieval", "RETRIEVER_PROVIDER=nvidia → nemotron-3-embed-1b + rerank-vl-1b-v2", "RETRIEVER_PROVIDER=lexical → BM25 over the same documents"],
                 ["Optimization", "OPTIMIZATION_PROVIDER=cuopt → cuOpt server (GPU)", "OPTIMIZATION_PROVIDER=fallback → HiGHS (CPU), same MILP"],
-                ["Sandbox", "SECURITY_RUNTIME=openshell → agent inside OpenShell", "SECURITY_RUNTIME=policy-mirror → same policy YAML evaluated in-process"],
+                ["Sandbox", "AGENT_EXECUTION=remote + worker in OpenShell (AWS: enable_openshell) → agent inside OpenShell", "SECURITY_RUNTIME=policy-mirror → same policy YAML evaluated in-process"],
+                ["External agent", "OpenClaw in NemoClaw + infra/openclaw-bridge → dashboard can hand tasks to OpenClaw", "no bridge → OpenClaw option disabled; MCP server still usable directly"],
               ].map((r) => (
                 <tr key={r[0]} className="border-t border-ops-line">
                   <td className="px-4 py-2 font-semibold text-white">{r[0]}</td>

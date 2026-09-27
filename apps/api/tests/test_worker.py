@@ -123,3 +123,24 @@ def test_worker_fails_fast_on_wrong_token(live_control_plane, monkeypatch):
     settings = make_settings(tmp_path, agent_worker_token="wrong-token", reroute_api_base_url=base, airline_api_base_url=base)
     with pytest.raises(httpx.HTTPStatusError):
         AgentWorker(settings)
+
+
+async def test_dashboard_reports_where_the_agent_actually_runs(live_control_plane):
+    """The control plane itself uses the policy mirror; a worker in an OpenShell sandbox says so on every call."""
+    base, tmp_path = live_control_plane
+    settings = make_settings(
+        tmp_path,
+        agent_worker_token="worker-secret",
+        reroute_api_base_url=base,
+        airline_api_base_url=base,
+        security_runtime="openshell",
+    )
+    async with httpx.AsyncClient(base_url=base) as client:
+        before = (await client.get("/api/system/runtime")).json()
+        assert before["security"]["agent_runtime"] == "policy-mirror" and before["agent"]["worker"]["connected"] is False
+        AgentWorker(settings)  # its first call to the control plane carries X-Agent-Security-Runtime: openshell
+        after = (await client.get("/api/system/runtime")).json()
+        assert after["security"]["runtime"] == "policy-mirror"  # the control plane's own setting is unchanged
+        assert after["security"]["agent_runtime"] == "openshell" and after["agent"]["worker"]["connected"] is True
+        assert after["security"]["enforced_by"] == "NVIDIA OpenShell sandbox"
+        assert (await client.get("/api/security/policy")).json()["agent_runtime"] == "openshell"
