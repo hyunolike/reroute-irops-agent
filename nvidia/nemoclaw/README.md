@@ -98,7 +98,7 @@ Install on the NemoClaw host (after `nemoclaw onboard` and `mcp add`):
 ```bash
 sudo install -d /opt/openclaw-bridge && sudo install -m 0755 infra/openclaw-bridge/bridge.py /opt/openclaw-bridge/
 sudo install -m 0644 infra/openclaw-bridge/openclaw-bridge.service /etc/systemd/system/
-sudo sed -i "s/__USER__/$USER/g" /etc/systemd/system/openclaw-bridge.service   # also set REROUTE_URL there
+sudo sed -i "s/__USER__/$USER/g; s/__REROUTE_HOST__/<your ReRoute host>/" /etc/systemd/system/openclaw-bridge.service
 install -d -m 0700 ~/.config/reroute && install -m 0600 /dev/stdin ~/.config/reroute/mcp-token   # paste the token, Ctrl-D
 sudo systemctl daemon-reload && sudo systemctl enable --now openclaw-bridge
 ```
