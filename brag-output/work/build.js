@@ -1,0 +1,11 @@
+const fs = require('fs');
+let html = fs.readFileSync('template.html', 'utf8');
+const dir = 'node_modules/lucide-static/icons/';
+const load = (n) => fs.readFileSync(dir + n + '.svg', 'utf8').replace(/<!--[\s\S]*?-->/g, '').replace(/\s*class="[^"]*"/, '').replace(/width="24"/, '').replace(/height="24"/, '').trim();
+const names = new Set([...html.matchAll(/\{\{([a-z-]+)\}\}/g)].map(m => m[1]));
+['check', 'loader-circle', 'play', 'circle-check'].forEach(n => names.add(n));
+const icons = {};
+for (const n of names) icons[n] = load(n);
+html = html.replace(/\{\{([a-z-]+)\}\}/g, (_, n) => icons[n]).replace('{{ICONS_JSON}}', JSON.stringify(icons));
+fs.writeFileSync('index.html', html);
+console.log('icons', [...names].join(' '));

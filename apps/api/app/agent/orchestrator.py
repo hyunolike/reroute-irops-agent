@@ -172,14 +172,53 @@ class AgentOrchestrator:
     # SAME validation, preconditions, state machine, event log and approval boundary as its own agent.
     def open_external_task(self, command: str, client: str, runtime: dict[str, Any]) -> str:
         task = self.repo.create_task(command, runtime={**runtime, "planner": "external", "planner_client": client})
-        memory = AgentMemory()
-        ctx = ToolContext(task_id=task.id, agent=self.agent, memory=memory, http=self.http, gateway=self.gateway)
-        llm_ref: dict[str, LLMProvider] = {"llm": self.llm}
-        ctx.write_briefing = lambda: self._write_briefing(task.id, memory, llm_ref)
-        self._external[task.id] = ctx
+        self._open_external_ctx(task.id)
         self._state[task.id] = ""
         self._set_state(task.id, AgentState.RECEIVED, f"Goal received from external agent ({client}): “{command}”")
         return task.id
+
+    def attach_external_task(self, task_id: str, client: str) -> str:
+        """Let an external agent plan a task the operator created on the dashboard for it (agent = "openclaw").
+
+        Only such tasks, only once, and only before planning started - an external agent cannot take over a task
+        ReRoute's own agent owns or re-open one that is already waiting for approval.
+        """
+        task = self.repo.get_task(task_id)
+        if task is None:
+            raise KeyError(f"task {task_id} not found")
+        runtime = task.runtime or {}
+        if runtime.get("requested_agent") != "openclaw":
+            raise PermissionError(f"task {task_id} was not handed to an external agent")
+        if task_id in self._external or task.state != AgentState.RECEIVED.value:
+            raise PermissionError(f"task {task_id} is already being planned ({task.state})")
+        self._open_external_ctx(task_id)
+        self._state[task_id] = task.state
+        self.repo.update_task(task_id, runtime={**runtime, "planner_client": client})
+        self._emit(
+            task_id, EventType.PLANNER, Component.EXTERNAL_AGENT, f"{client} took the task and is planning", {"client": client}
+        )
+        return task_id
+
+    def external_reply(self, task_id: str, text: str, ok: bool) -> None:
+        """The external agent's final answer to the operator (relayed by the OpenClaw bridge)."""
+        task = self.repo.get_task(task_id)
+        if task is None:
+            raise KeyError(f"task {task_id} not found")
+        title = _one_line(text) or ("OpenClaw finished" if ok else "OpenClaw could not finish the task")
+        self._state.setdefault(task_id, task.state)
+        self._emit(task_id, EventType.PLANNER, Component.EXTERNAL_AGENT, f"OpenClaw: {title}", {"text": text[:8000], "ok": ok})
+        settled = {s.value for s in (AgentState.WAITING_APPROVAL, AgentState.COMPLETED, AgentState.REJECTED, AgentState.FAILED)}
+        if not ok and task.state not in settled:
+            self.repo.update_task(task_id, error=title[:500])
+            self._set_state(task_id, AgentState.FAILED, "External agent stopped before proposing a plan")
+            self._external.pop(task_id, None)
+
+    def _open_external_ctx(self, task_id: str) -> None:
+        memory = AgentMemory()
+        ctx = ToolContext(task_id=task_id, agent=self.agent, memory=memory, http=self.http, gateway=self.gateway)
+        llm_ref: dict[str, LLMProvider] = {"llm": self.llm}
+        ctx.write_briefing = lambda: self._write_briefing(task_id, memory, llm_ref)
+        self._external[task_id] = ctx
 
     def _external_ctx(self, task_id: str) -> ToolContext:
         ctx = self._external.get(task_id)

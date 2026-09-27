@@ -13,6 +13,8 @@ Use when an operations user asks to handle a flight disruption. Tools come from 
 ## Workflow
 
 1. `open_recovery_task(instruction)` with the user's words → keep `task_id`. Tell the user the dashboard link.
+   - If the message contains `ReRoute task_id=...`, the operator created the task on the ReRoute dashboard for you:
+     call `open_recovery_task(instruction, task_id="...")` with that id instead of opening a new task.
 2. `log_reasoning(task_id, note)` with a 3-5 step plan. Add a short note before important steps.
 3. `get_disrupted_flight(task_id, flight_no)`.
    - Operating normally → `finish_without_action`.

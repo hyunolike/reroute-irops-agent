@@ -73,6 +73,36 @@ nemoclaw ops-copilot connect
 NemoClaw generates a narrow OpenShell `protocol: mcp` policy for that endpoint (exact host, path, MCP methods, request-size
 limit) and injects the bearer token at egress, so the raw token never sits in the sandbox.
 
+## Send dashboard instructions to OpenClaw
+
+The ReRoute dashboard's command box has an agent switch: **ReRoute 에이전트** (Nemotron in an OpenShell sandbox) or
+**OpenClaw (NemoClaw)**. Choosing OpenClaw queues the task for the bridge instead of ReRoute's worker.
+
+```
+dashboard ─POST /api/agent/tasks {agent:"openclaw"}─▶ ReRoute (pending="openclaw")
+                                                         ▲ claim / reply (HTTPS, outbound only)
+NemoClaw host: infra/openclaw-bridge/bridge.py ──────────┘
+   └─ nemoclaw <sandbox> agent -m "<instruction> (ReRoute task_id=...)"
+        └─ OpenClaw ─MCP─▶ open_recovery_task(task_id=...) → same task, same live timeline → propose → human approves
+```
+
+- The bridge authenticates with the same `REROUTE_MCP_TOKEN` NemoClaw already uses for MCP and only calls
+  `/api/bridge/openclaw/{heartbeat,claim,tasks/<id>/reply}` - none of them can approve or execute.
+- `open_recovery_task(task_id=...)` attaches only to tasks created with `agent: "openclaw"`, only once and only before
+  planning starts. The dashboard greys out the OpenClaw option when no bridge heartbeat arrived in the last 30 s.
+- The hosted NVIDIA endpoint intermittently returns "Service temporarily overloaded"; the bridge retries such a turn
+  with a new session (up to 4 attempts) and reports a failure to the task otherwise.
+
+Install on the NemoClaw host (after `nemoclaw onboard` and `mcp add`):
+
+```bash
+sudo install -d /opt/openclaw-bridge && sudo install -m 0755 infra/openclaw-bridge/bridge.py /opt/openclaw-bridge/
+sudo install -m 0644 infra/openclaw-bridge/openclaw-bridge.service /etc/systemd/system/
+sudo sed -i "s/__USER__/$USER/g" /etc/systemd/system/openclaw-bridge.service   # also set REROUTE_URL there
+install -d -m 0700 ~/.config/reroute && install -m 0600 /dev/stdin ~/.config/reroute/mcp-token   # paste the token, Ctrl-D
+sudo systemctl daemon-reload && sudo systemctl enable --now openclaw-bridge
+```
+
 ## Verify the endpoint before connecting NemoClaw
 
 ```bash
@@ -87,4 +117,4 @@ REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://reroute.example.com/mcp
 |---|---|
 | ReRoute MCP server: tools, bearer auth, guardrails, no approval power, human approval afterwards | **Verified** – `apps/api/tests/test_mcp.py` over real Streamable HTTP (legacy handshake and modern protocol) + `mcp_smoke` against a live server |
 | Dashboard following an MCP-started task live | **Verified** in the browser (`docs/screenshots/09-*`, `10-*`) |
-| `nemoclaw … mcp add / status / skill install` with a real OpenClaw sandbox | **Documented only** – written from NemoClaw's docs (alpha); not executed here (no NemoClaw/Docker/HTTPS endpoint in this environment) |
+| `nemoclaw … mcp add / status / skill install` with a real OpenClaw sandbox | **Verified** (2026-09-27) – NemoClaw + OpenClaw (`nemotron-3-super-120b-a12b`) registered the CloudFront HTTPS endpoint (credential resolution HTTP 200) and drove KE123 to `WAITING_APPROVAL` over MCP. Needs Docker Engine ≥ 28 (moby#34143) |

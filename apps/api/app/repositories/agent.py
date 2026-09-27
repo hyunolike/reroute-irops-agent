@@ -68,11 +68,14 @@ class AgentRepository:
             s.refresh(ev)
             return ev
 
-    def claim_pending(self) -> tuple[AgentTask, str] | None:
-        """Atomically claim the oldest task with queued work (optimistic compare-and-set)."""
+    def claim_pending(self, actions: tuple[str, ...] = ("run", "resume")) -> tuple[AgentTask, str] | None:
+        """Atomically claim the oldest task with queued work of the given kinds (optimistic compare-and-set).
+
+        ReRoute's worker claims "run"/"resume"; the OpenClaw bridge claims "openclaw" - neither takes the other's.
+        """
         with self.db.session() as s:
             for task in s.scalars(
-                select(AgentTask).where(AgentTask.pending.is_not(None)).order_by(AgentTask.updated_at).limit(5)
+                select(AgentTask).where(AgentTask.pending.in_(actions)).order_by(AgentTask.updated_at).limit(5)
             ):
                 action = task.pending
                 n = (
