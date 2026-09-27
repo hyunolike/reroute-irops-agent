@@ -15,6 +15,8 @@
 | **"Read-only actions can execute autonomously, while state-changing booking actions require human approval."** | Lookups, retrieval and optimization run autonomously; booking changes always go through a human. |
 | **"Governed by NVIDIA OpenShell."** | The agent runs under an OpenShell policy: unknown egress, credential access and self-approval calls are denied. |
 
+https://github.com/user-attachments/assets/3676a23d-fc44-42bb-8b70-774336f012c3
+
 ![Plan ready for approval](docs/screenshots/03-plan-ready.png)
 
 | Quick links | |
