@@ -14,6 +14,10 @@
 | **"Read-only actions can execute autonomously, while state-changing booking actions require human approval."** | 조회·검색·최적화는 자율 실행하고, 예약 변경은 반드시 사람의 승인을 거칩니다. |
 | **"Governed by NVIDIA OpenShell."** | 에이전트는 OpenShell 정책 안에서만 동작합니다. 허용되지 않은 외부 통신·자격증명 접근·자기 승인 호출은 모두 차단됩니다. |
 
+[![ReRoute 런칭 영상 — 클릭하면 소리 있는 mp4로 재생](docs/video/reroute-launch.gif)](docs/video/reroute-launch.mp4)
+
+<sub>🔊 소리 있는 영상: [docs/video/reroute-launch.mp4](docs/video/reroute-launch.mp4)</sub>
+
 ![승인 대기 중인 재배정안](docs/screenshots/03-plan-ready.png)
 
 | 바로가기 | |
