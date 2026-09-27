@@ -1,0 +1,2 @@
+KE123 결항, 영향 승객 35명. 운영자가 한 문장을 입력하면 ReRoute가 규정을 검색하고 NVIDIA cuOpt로 재배정안을 계산합니다. 같은 항공편 조건에서 선착순 수작업보다 연결편 놓침이 4건에서 0건으로 줄었고, 예약 변경은 사람이 승인해야만 실행됩니다.
+LLM does not decide passenger allocation. 🛫 #NVIDIA #AgenticAI

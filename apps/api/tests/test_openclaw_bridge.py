@@ -60,6 +60,8 @@ async def test_openclaw_attaches_to_dashboard_task_and_human_still_approves(live
             headers=AUTH,
         )
         assert r.json()["state"] == "WAITING_APPROVAL"
+        runtime = r.json()["runtime"]
+        assert runtime["planner_client"] == "OpenClaw (NemoClaw)" and "openclaw-test" in runtime["mcp_client"]
         evs = (await h.get(f"/api/agent/tasks/{tid}/events", params={"stream": False})).json()["events"]
     titles = [e["title"] for e in evs if e["component"] == "external-agent"]
     assert titles[0].startswith("Sent to OpenClaw") and any("took the task" in t for t in titles)

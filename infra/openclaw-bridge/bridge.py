@@ -36,6 +36,9 @@ MAX_ATTEMPTS = int(os.environ.get("BRIDGE_MAX_ATTEMPTS", "4"))
 MODEL = os.environ.get("NEMOCLAW_MODEL", "nvidia/nemotron-3-super-120b-a12b")
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 TRANSIENT = ("temporarily overloaded", "try again in a moment", "rate limit", "429")
+# Once OpenClaw proposed a plan the operator's part begins; a failed final answer is not worth another turn.
+PROPOSED = {"WAITING_APPROVAL", "EXECUTING", "COMPLETED", "REJECTED"}
+PROPOSED_NOTE = "재배정안을 제안했고 운영자 승인을 기다립니다. (OpenClaw의 마지막 답변은 모델 과부하로 받지 못했습니다.)"
 
 PROMPT = """{command}
 
@@ -93,6 +96,12 @@ def run_turn(task_id: str, command: str) -> tuple[bool, str]:
             out, ok = f"OpenClaw did not answer within {TURN_TIMEOUT}s", False
         if ok:
             return True, answer(out)
+        state = task_state(task_id)
+        if state in PROPOSED:
+            log.info(
+                "task %s: already %s - not retrying the final answer", task_id, state
+            )
+            return True, PROPOSED_NOTE
         if not any(t in out.lower() for t in TRANSIENT) or attempt == MAX_ATTEMPTS:
             return False, answer(out)
         wait = min(60, 15 * attempt)
@@ -105,6 +114,11 @@ def run_turn(task_id: str, command: str) -> tuple[bool, str]:
         )
         time.sleep(wait)
     return False, answer(out)
+
+
+def task_state(task_id: str) -> str | None:
+    status, task = api("GET", f"/api/agent/tasks/{task_id}")
+    return task.get("state") if status == 200 and task else None
 
 
 def answer(out: str) -> str:

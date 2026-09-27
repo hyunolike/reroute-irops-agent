@@ -193,9 +193,11 @@ class AgentOrchestrator:
             raise PermissionError(f"task {task_id} is already being planned ({task.state})")
         self._open_external_ctx(task_id)
         self._state[task_id] = task.state
-        self.repo.update_task(task_id, runtime={**runtime, "planner_client": client})
+        # Keep the dashboard's label ("OpenClaw (NemoClaw)"); the MCP client name (e.g. its HTTP library) goes aside.
+        label = runtime.get("planner_client") or client
+        self.repo.update_task(task_id, runtime={**runtime, "planner_client": label, "mcp_client": client})
         self._emit(
-            task_id, EventType.PLANNER, Component.EXTERNAL_AGENT, f"{client} took the task and is planning", {"client": client}
+            task_id, EventType.PLANNER, Component.EXTERNAL_AGENT, f"{label} took the task and is planning", {"client": client}
         )
         return task_id
 

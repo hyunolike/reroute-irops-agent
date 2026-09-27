@@ -1,0 +1,7 @@
+file 't2.40.jpg'
+file 't2.95.jpg'
+file 't3.20.jpg'
+file 't5.62.jpg'
+file 't6.50.jpg'
+file 't7.90.jpg'
+file 't9.20.jpg'

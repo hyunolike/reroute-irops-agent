@@ -33,25 +33,25 @@ svg { width: 1em; height: 1em; display: inline-block; vertical-align: -0.125em; 
 .scene { position: absolute; inset: 0; opacity: 0; }
 
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; }
-.caption { position: absolute; left: 0; right: 0; top: 96px; text-align: center; font-size: 60px; font-weight: 800; letter-spacing: -0.02em; color: #fff; }
+.caption { position: absolute; left: 0; right: 0; top: 170px; text-align: center; font-size: 60px; font-weight: 800; letter-spacing: -0.02em; color: #fff; }
 .caption em { font-style: normal; color: var(--nv); }
 .label { font-size: 17px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #cbd5e1; }
 
 /* S1 */
-#s1 .wrap { position: absolute; left: 0; right: 0; top: 190px; text-align: center; }
+#s1 .wrap { position: absolute; left: 0; right: 0; top: 220px; text-align: center; }
 #s1 .dis { display: inline-flex; align-items: center; gap: 12px; color: var(--muted); font-size: 22px; font-weight: 700; letter-spacing: .2em; }
 #s1 .flight { font-size: 250px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; margin-top: 30px; color: #fff; }
 #s1 .route { font-size: 64px; font-weight: 800; margin-top: 18px; display: inline-flex; gap: 26px; align-items: center; }
 #s1 .route svg { color: var(--nv); }
-#s1 .badge { position: absolute; left: 50%; top: 420px; margin-left: 330px; transform-origin: center;
+#s1 .badge { position: absolute; left: 50%; top: 450px; margin-left: 330px; transform-origin: center;
   font-size: 34px; font-weight: 800; letter-spacing: .08em; color: #fecdd3; background: rgba(244,63,94,.15);
   border: 3px solid rgba(251,113,133,.8); border-radius: 999px; padding: 8px 26px; }
-#s1 .line { position: absolute; left: 0; right: 0; top: 820px; text-align: center; font-size: 58px; font-weight: 800; }
+#s1 .line { position: absolute; left: 0; right: 0; top: 760px; text-align: center; font-size: 58px; font-weight: 800; }
 #s1 .line b { color: var(--rose); }
-#s1 .reason { position: absolute; left: 0; right: 0; top: 920px; text-align: center; font-size: 22px; color: var(--muted); }
+#s1 .reason { position: absolute; left: 0; right: 0; top: 860px; text-align: center; font-size: 22px; color: var(--muted); }
 
 /* S2 */
-#s2 .steps { position: absolute; left: 160px; right: 160px; top: 290px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+#s2 .steps { position: absolute; left: 160px; right: 160px; top: 380px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
 .step { display: flex; gap: 14px; align-items: center; padding: 18px 18px; border-radius: 14px; border: 1px solid var(--line); background: rgba(13,20,32,.8); }
 .step .ic { width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; background: rgba(118,185,0,.12); color: var(--nv); font-size: 22px; flex: none; }
 .step .t { font-size: 19px; font-weight: 700; white-space: nowrap; }
@@ -59,7 +59,7 @@ svg { width: 1em; height: 1em; display: inline-block; vertical-align: -0.125em; 
 .step.on { border-color: var(--nv); background: rgba(118,185,0,.10); box-shadow: 0 0 0 1px rgba(118,185,0,.3), 0 0 40px rgba(118,185,0,.15); }
 .step.on .ic { background: var(--nv); color: #000; }
 .step.off { opacity: .45; }
-#s2 .cmd { position: absolute; left: 160px; right: 160px; top: 440px; padding: 22px; }
+#s2 .cmd { position: absolute; left: 160px; right: 160px; top: 530px; padding: 22px; }
 #s2 .row { display: flex; gap: 18px; }
 #s2 .input { flex: 1; position: relative; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); height: 92px; display: flex; align-items: center; padding: 0 70px 0 106px; font-size: 32px; color: #fff; white-space: nowrap; overflow: hidden; }
 #s2 .input.focus { border-color: rgba(118,185,0,.6); box-shadow: 0 0 0 3px rgba(118,185,0,.25); }
@@ -75,8 +75,9 @@ svg { width: 1em; height: 1em; display: inline-block; vertical-align: -0.125em; 
 #ripple { position: absolute; z-index: 49; width: 80px; height: 80px; border-radius: 50%; border: 3px solid var(--nv-light); opacity: 0; }
 
 /* S3 */
-#s3 .caption { top: 70px; font-size: 54px; }
-#s3 .act { position: absolute; left: 110px; top: 190px; width: 940px; height: 820px; padding: 26px 32px; overflow: hidden; }
+#s3 .caption { top: 60px; font-size: 54px; }
+#s3 .act { position: absolute; left: 110px; top: 180px; width: 940px; height: 850px; padding: 26px 32px; overflow: hidden; }
+#s3 .clip { height: 700px; overflow: hidden; }
 #s3 .act .hd { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 18px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
 #s3 .act .hd .sub { font-size: 17px; color: var(--muted); margin-top: 6px; }
 #s3 .tc { font-size: 18px; color: var(--muted); }
@@ -92,15 +93,15 @@ svg { width: 1em; height: 1em; display: inline-block; vertical-align: -0.125em; 
 .tl .call .fn { color: #7dd3fc; }
 .tl .call .ms { margin-left: auto; color: var(--muted); font-size: 13px; }
 .tl .call .res { margin-top: 6px; color: #e2e8f0; font-family: Pretendard; font-size: 18px; }
-#s3 .kpis { position: absolute; left: 1090px; top: 190px; width: 720px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-.kpi { padding: 24px 28px; height: 200px; }
+#s3 .kpis { position: absolute; left: 1090px; top: 180px; width: 720px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.kpi { padding: 28px 32px; height: 260px; }
 .kpi .k { font-size: 16px; letter-spacing: .12em; color: var(--muted); font-weight: 700; }
-.kpi .v { font-size: 110px; font-weight: 800; line-height: 1.05; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.kpi .v { font-size: 130px; font-weight: 800; line-height: 1.05; margin-top: 6px; font-variant-numeric: tabular-nums; }
 .kpi .d { font-size: 20px; color: var(--muted); }
-#s3 .solver { position: absolute; left: 1090px; top: 860px; width: 720px; height: 150px; padding: 22px 28px; }
-#s3 .solver .o { font-size: 34px; font-weight: 800; display: flex; align-items: center; gap: 14px; margin-top: 8px; }
+#s3 .solver { position: absolute; left: 1090px; top: 740px; width: 720px; height: 290px; padding-top: 36px; padding: 22px 28px; }
+#s3 .solver .o { font-size: 60px; font-weight: 800; display: flex; align-items: center; gap: 14px; margin-top: 8px; }
 #s3 .solver .o svg { color: var(--nv); }
-#s3 .solver .m { font-size: 16px; color: var(--muted); margin-top: 8px; }
+#s3 .solver .m { font-size: 20px; margin-top: 18px; color: var(--muted); margin-top: 8px; }
 
 /* S4 */
 #s4 .quote { position: absolute; left: 0; right: 0; top: 150px; text-align: center; font-size: 76px; font-weight: 800; letter-spacing: -0.02em; }
@@ -119,8 +120,8 @@ svg { width: 1em; height: 1em; display: inline-block; vertical-align: -0.125em; 
 #s4 .note { position: absolute; left: 0; right: 0; top: 960px; text-align: center; font-size: 20px; color: var(--muted); }
 
 /* S5 */
-#s5 .caption { top: 80px; }
-#s5 .ap { position: absolute; left: 150px; top: 230px; width: 820px; padding: 32px 36px; border-color: rgba(167,139,250,.45); box-shadow: 0 0 60px rgba(139,92,246,.12); }
+#s5 .caption { top: 110px; }
+#s5 .ap { position: absolute; left: 150px; top: 290px; width: 820px; padding: 32px 36px; border-color: rgba(167,139,250,.45); box-shadow: 0 0 60px rgba(139,92,246,.12); }
 #s5 .ap .hd { display: flex; justify-content: space-between; align-items: flex-start; }
 #s5 .ap .hd .sub { font-size: 17px; color: var(--muted); margin-top: 6px; }
 #s5 .ap .hd .l { display: flex; gap: 14px; }
@@ -139,7 +140,7 @@ svg { width: 1em; height: 1em; display: inline-block; vertical-align: -0.125em; 
 #s5 .reject { width: 200px; height: 76px; border-radius: 12px; border: 1px solid rgba(251,113,133,.6); color: var(--rose); font-size: 26px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 10px; }
 #s5 .bypass { margin-top: 14px; border: 1px dashed rgba(251,113,133,.45); border-radius: 12px; text-align: center; padding: 14px; color: #fda4af; font-size: 18px; transform-origin: center; }
 #s5 .blocked { margin-top: 14px; border: 1px solid rgba(251,113,133,.7); background: rgba(244,63,94,.12); border-radius: 12px; padding: 16px 20px; color: #fecdd3; font-size: 22px; display: flex; gap: 12px; align-items: center; }
-#s5 .fr { position: absolute; left: 1010px; top: 230px; width: 760px; padding: 32px 36px; }
+#s5 .fr { position: absolute; left: 1010px; top: 290px; width: 760px; padding: 32px 36px; }
 #s5 .fr .hd { display: flex; gap: 14px; }
 #s5 .fr .hd svg { color: var(--nv); font-size: 28px; margin-top: 2px; }
 #s5 .fr .sub { font-size: 17px; color: var(--muted); margin-top: 6px; }
@@ -359,7 +360,7 @@ svg { width: 1em; height: 1em; display: inline-block; vertical-align: -0.125em; 
 </svg> Agent Activity</div><div class="sub">Nemotron plans → tools execute → every step is logged</div></div>
         <div class="tc mono" id="s3tc">0 tool calls</div>
       </div>
-      <div id="s3tl"></div>
+      <div class="clip"><div id="s3tl"></div></div>
     </div>
     <div class="kpis" id="s3kpis">
       <div class="kpi panel"><div class="k">AFFECTED</div><div class="v" id="k0" style="color:#fff">0</div><div class="d">영향 승객</div></div>
@@ -711,7 +712,7 @@ window.render = function (t) {
     $('s2input').classList.toggle('focus', t < 5.75);
     $('s2caret').style.opacity = t < 5.75 && (n < CMD.length || Math.floor(t * 3) % 2 === 0) ? 1 : 0;
     // cursor: enters bottom right, glides to Run Agent, clicks at 5.6
-    cursorAt(t, [[5.0, 1900, 900], [5.5, 1600, 505]]);
+    cursorAt(t, [[5.0, 1900, 960], [5.5, 1580, 575]]);
     const clicked = t >= 5.6;
     const btn = $('s2btn');
     btn.classList.toggle('busy', clicked);
@@ -720,7 +721,7 @@ window.render = function (t) {
     $('s2btnic').innerHTML = clicked ? ICON['loader-circle'] : ICON['play'];
     $('s2btnic').style.display = 'inline-block';
     $('s2btnic').style.transform = clicked ? `rotate(${(t - 5.6) * 540}deg)` : 'none';
-    ripple(t, 5.6, 1612, 512);
+    ripple(t, 5.6, 1587, 579);
     const active = clicked ? 1 : 0;
     document.querySelectorAll('#s2 .step').forEach((s, i) => {
       s.classList.toggle('on', i === active);
@@ -749,7 +750,7 @@ window.render = function (t) {
       if (done && s.fn) calls += (i === 4 ? 6 : 1);  // RAG step runs several searches
     });
     // keep newest steps in view: scroll timeline up once it overflows
-    const scroll = eio(prog(t, 8.8, 9.4)) * 190;
+    const scroll = 0;
     $('s3tl').style.transform = `translateY(${-scroll}px)`;
     $('s3tc').textContent = `${calls} tool calls`;
     count($('k0'), t, 8.05, .5, 35);
@@ -785,15 +786,15 @@ window.render = function (t) {
     const secs = 29 * 60 + 59 - Math.floor(Math.max(0, t - 15.1));
     $('s5timer').textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
     // bypass click at 15.55 -> 403
-    cursorAt(t, [[15.3, 1000, 820], [15.5, 560, 840], [16.25, 560, 840], [16.5, 420, 700]]);
+    cursorAt(t, [[15.25, 1000, 900], [15.5, 555, 678], [16.2, 555, 678], [16.48, 446, 601]]);
     $('s5bypass').style.transform = `scale(${press(t, 15.55)})`;
-    ripple(t, 15.55, 570, 850);
+    ripple(t, 15.55, 561, 683);
     const pb = prog(t, 15.62, 15.82);
     $('s5blocked').style.display = t >= 15.62 ? 'flex' : 'none';
     $('s5blocked').style.opacity = pb;
     $('s5blocked').style.transform = `translateX(${Math.sin(pb * 18) * 8 * (1 - pb)}px)`;
     // approve click at 16.55
-    ripple(t, 16.55, 432, 712);
+    ripple(t, 16.55, 452, 606);
     $('s5approve').style.transform = `scale(${press(t, 16.55)})`;
     const ok = t >= 16.6;
     $('s5pill').className = 'pill ' + (ok ? 'approved' : 'pending');
