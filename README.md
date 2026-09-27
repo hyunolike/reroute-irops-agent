@@ -34,7 +34,7 @@ https://github.com/user-attachments/assets/3676a23d-fc44-42bb-8b70-774336f012c3
 ## 목차
 1. [문제](#문제) · 2. [해결책](#해결책) · 3. [왜 Agentic AI인가](#왜-agentic-ai인가) · 4. [왜 NVIDIA인가](#왜-nvidia인가)
 5. [아키텍처](#아키텍처) · [LLM 에이전트 동작 방식](#llm-에이전트-동작-방식) · [NemoClaw·OpenClaw 연동](#nemoclaw--openclaw-연동-mcp) · 6. [NVIDIA 스택과 실행 모드](#nvidia-스택과-실행-모드) · 7. [데모](#데모) · 8. [시작하기](#시작하기)
-9. [AWS 배포](#aws-배포) · 10. [보안](#보안) · 11. [최적화 모델](#최적화-모델) · 12. [화면](#화면) · 13. [향후 계획](#향후-계획)
+9. [클라우드 배포 구조](#클라우드-배포-구조) · [AWS 배포](#aws-배포) · 10. [보안](#보안) · 11. [최적화 모델](#최적화-모델) · 12. [화면](#화면) · 13. [향후 계획](#향후-계획)
 
 ---
 
@@ -246,6 +246,67 @@ make test                       # 백엔드 테스트 99개
 DATABASE_URL=sqlite:///./reroute.db make dev-api    # 또는 로컬 PostgreSQL
 make dev-web                    # http://localhost:3000 (/api는 :8000으로 프록시)
 ```
+
+## 클라우드 배포 구조
+
+라이브 데모는 클라우드 두 곳에 나눠 돌아갑니다. **AWS**에는 ReRoute 서비스가, **GCP**에는 NemoClaw와 OpenClaw가 있고,
+둘 다 NVIDIA의 호스팅 모델을 부릅니다. 배포는 GitHub Actions가 합니다.
+
+```mermaid
+flowchart LR
+    op([운영자 · 심사위원]) -->|HTTPS| cf
+
+    subgraph aws["AWS · ap-northeast-2 (Terraform)"]
+        cf["CloudFront<br/>도메인 없이 HTTPS"] -->|"HTTP + 비밀 헤더"| alb["ALB<br/>CloudFront만 허용"]
+        subgraph ec2["EC2 앱 호스트 (프라이빗 서브넷, Docker 29)"]
+            web["web :3000"]
+            cp["reroute-api :8000<br/>컨트롤 플레인 · MCP · 브리지 API"]
+            air["airline-service :8001"]
+            subgraph sb["OpenShell 샌드박스"]
+                wk["에이전트 worker<br/>DB 정보 · 서명 키 없음"]
+            end
+        end
+        alb --> web
+        alb --> cp
+        wk -->|"허용 경로만<br/>worker 토큰은 provider 주입"| cp
+        wk --> air
+        cp --> rds[("RDS PostgreSQL")]
+        air --> rds
+        sm["Secrets Manager"] -.->|부팅 시| ec2
+    end
+
+    subgraph gcp["GCP · asia-northeast3 (별도 프로젝트)"]
+        subgraph vm["VM e2-standard-4 (인바운드는 SSH만)"]
+            br["openclaw-bridge<br/>(systemd)"]
+            subgraph ns["NemoClaw 샌드박스 (OpenShell)"]
+                oc["OpenClaw"]
+            end
+        end
+        br -->|"nemoclaw agent"| oc
+    end
+
+    br -->|"HTTPS: claim / reply"| cf
+    oc -->|"HTTPS: MCP (/mcp)"| cf
+
+    nv["NVIDIA API catalog<br/>Nemotron (NIM) · NeMo Retriever"]
+    wk -->|"Nemotron 추론"| nv
+    cp -->|"규정 검색"| nv
+    oc -->|"Nemotron 추론"| nv
+
+    gh["GitHub Actions<br/>develop 머지 → CI → ECR → SSM"] -.->|"OIDC (AWS 키 저장 안 함)"| ec2
+```
+
+| 연결 | 내용 |
+|---|---|
+| 운영자 → CloudFront → ALB | HTTPS는 CloudFront에서 끝납니다. ALB는 CloudFront IP 대역과 비밀 헤더가 있는 요청만 받습니다 |
+| worker → 컨트롤 플레인, 항공사 API | OpenShell 정책이 허용한 경로만 지납니다. worker 토큰과 NVIDIA 키는 provider가 주입해 샌드박스에는 placeholder만 있습니다 |
+| AWS → NVIDIA | Nemotron 추론은 worker가, NeMo Retriever 검색은 컨트롤 플레인이 NAT를 거쳐 호출합니다 |
+| GCP 브리지 → ReRoute | 대시보드에서 OpenClaw로 보낸 작업을 가져가고 결과를 보고합니다. 바깥으로만 연결해 GCP에 열린 포트가 없습니다 |
+| OpenClaw → ReRoute MCP | 같은 작업에 붙어 도구를 호출합니다. MCP에는 승인과 실행 도구가 없어서 승인은 대시보드에서 사람이 합니다 |
+| GitHub → AWS | `develop`에 머지하면 CI, 이미지 빌드, ECR 업로드, SSM 롤아웃이 이어집니다. 브리지는 GCP VM에 직접 배포합니다 |
+
+cuOpt는 GPU 인스턴스(`enable_gpu = true`)에서 앱 호스트에 함께 뜹니다. 라이브 데모 계정은 AWS 무료 플랜이라 GPU를 쓸 수 없어
+같은 MILP를 CPU(HiGHS)로 풉니다.
 
 ## AWS 배포
 

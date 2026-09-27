@@ -2,7 +2,7 @@ import { ArrowDown, Bot, Calculator, Database, Gavel, Globe, Library, Monitor, P
 import type { ReactNode } from "react";
 import { cx } from "@/lib/format";
 
-function Box({ icon, title, sub, tone = "slate", className }: { icon: ReactNode; title: string; sub?: string; tone?: "nv" | "slate" | "violet" | "sky"; className?: string }) {
+export function Box({ icon, title, sub, tone = "slate", className }: { icon: ReactNode; title: string; sub?: string; tone?: "nv" | "slate" | "violet" | "sky"; className?: string }) {
   const tones = {
     nv: "border-nv/50 bg-nv/10",
     slate: "border-ops-line bg-ops-panel2",
