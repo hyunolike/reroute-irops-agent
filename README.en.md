@@ -21,7 +21,6 @@ https://github.com/user-attachments/assets/3676a23d-fc44-42bb-8b70-774336f012c3
 
 | Quick links | |
 |---|---|
-| 🌐 Live demo (AWS) | https://d6z72s9r7a9wt.cloudfront.net · online during the judging period only |
 | 🎬 Demo in one command | `docker compose up --build` → http://localhost:3000 → **Run Agent** |
 | 🎞️ 21-second launch video | [docs/video/reroute-launch.mp4](docs/video/reroute-launch.mp4) — cancellation → one-sentence command → cuOpt re-accommodation → human approval |
 | 📖 3-minute judge guide | http://localhost:3000/guide · [docs/demo-scenario.md](docs/demo-scenario.md) |

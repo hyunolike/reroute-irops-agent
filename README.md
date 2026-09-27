@@ -20,7 +20,6 @@ https://github.com/user-attachments/assets/3676a23d-fc44-42bb-8b70-774336f012c3
 
 | 바로가기 | |
 |---|---|
-| 🌐 라이브 데모 (AWS) | https://d6z72s9r7a9wt.cloudfront.net · 시연 기간에만 운영합니다 |
 | 🎬 명령 한 줄로 데모 | `docker compose up --build` → http://localhost:3000 → **Run Agent** |
 | 🎞️ 21초 런칭 영상 | [docs/video/reroute-launch.mp4](docs/video/reroute-launch.mp4) — 결항 → 한 문장 지시 → cuOpt 재배정 → 사람 승인 흐름 |
 | 📖 심사위원 3분 가이드 | http://localhost:3000/guide · [발표 대본 (영문)](docs/demo-scenario.md) |
