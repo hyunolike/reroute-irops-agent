@@ -220,6 +220,38 @@ terraform apply -target='aws_cloudfront_distribution.main[0]'   # 1) CloudFront 
 terraform apply                                                  # 2) ALB 잠금 + 인스턴스 재생성 (1~2분 중단)
 ```
 
+### 에이전트를 OpenShell 샌드박스에서 실행 (`enable_openshell`)
+
+`enable_openshell = true`면 에이전트가 API 프로세스 밖, 앱 호스트의 **NVIDIA OpenShell 샌드박스** 안에서 DB 없는 worker로 돕니다
+(`AGENT_EXECUTION=remote`). 부팅 스크립트가 `infra/deploy/openshell-agent.sh`로 아래를 자동 설정하고, `deploy.sh`는 배포마다
+worker 샌드박스를 새 이미지로 다시 만듭니다.
+
+```mermaid
+flowchart LR
+    subgraph host["EC2 앱 호스트"]
+        api["reroute-api :8000<br/>(컨트롤 플레인)"]
+        air["airline-service :8001"]
+        subgraph sb["OpenShell 샌드박스 (Docker 드라이버)"]
+            w["agent worker<br/>uid 10001, DB 정보 없음"]
+        end
+        gw["OpenShell 게이트웨이<br/>정책 + provider"]
+    end
+    w -->|"허용된 경로만"| api
+    w -->|"허용된 경로만"| air
+    w -->|"POST /v1/chat/completions"| nim["NVIDIA NIM"]
+    gw -. "NVIDIA 키, worker 토큰을<br/>프록시에서 주입" .-> w
+```
+
+| 단계 | 내용 |
+|---|---|
+| Docker 28 이상 | Docker 28 미만은 숫자 UID로 만든 컨테이너에 파일을 복사하지 못합니다(moby#34143). AL2023 패키지는 25라서 공식 정적 바이너리로 교체하고 `dnf`에서 제외합니다 |
+| OpenShell 0.1.1 | 릴리스 RPM은 podman이 필요해 단독 바이너리를 씁니다. 게이트웨이는 systemd 서비스(`openshell-gateway`) |
+| provider | `nvidia/openshell/providers/`: NVIDIA 키는 `/v1/chat/completions`에만, worker 토큰은 컨트롤 플레인 경로에만 주입. 샌드박스에는 placeholder만 있습니다 |
+| 정책 | `reroute-agent.yaml`과 규칙은 같고, 호스트 이름만 호스트의 VPC DNS 이름으로 바꿉니다. 샌드박스 DNS는 `/etc/hosts`를 보지 않고 루프백은 항상 막히기 때문입니다 |
+| 재부팅 | `reroute-agent-sandbox` 서비스가 게이트웨이와 함께 샌드박스를 다시 만듭니다 |
+
+확인: `aws ssm start-session --target <instance_id>` 후 `sudo openshell sandbox list`, `sudo openshell logs reroute-agent --since 5m`.
+
 ## 7. 문제 해결
 
 | 증상 | 원인과 조치 |

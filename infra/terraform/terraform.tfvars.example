@@ -18,6 +18,9 @@ image_tag = "latest"
 # Also gives the HTTPS MCP endpoint NemoClaw needs. Apply in two steps - see README "HTTPS".
 # enable_cloudfront = true
 
+# Run the agent as a worker inside an NVIDIA OpenShell sandbox on the app host (installs Docker >= 28 + OpenShell)
+# enable_openshell = true
+
 # HTTPS + DNS name (alternative to CloudFront) - required for the MCP endpoint used by NemoClaw (OpenClaw)
 # public_hostname = "reroute.example.com"
 # enable_mcp      = true

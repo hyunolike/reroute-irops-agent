@@ -89,3 +89,37 @@ def test_worker_cannot_reach_operator_endpoints(live_control_plane, tmp_path):
 
     with pytest.raises(PolicyViolation):
         worker.cp.request("POST", "/api/rebooking/plans/any/approve")
+
+
+def test_worker_waits_for_control_plane_at_startup(live_control_plane, monkeypatch):
+    """After a host reboot the sandboxed worker can start before the control plane; it must wait, not exit."""
+    base, tmp_path = live_control_plane
+    from app.agent import remote, worker
+
+    real = remote.ControlPlaneClient.request
+    attempts = {"n": 0}
+
+    def flaky(self, method, path, **kw):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise httpx.ConnectError("control plane still starting")
+        if attempts["n"] == 2:
+            return httpx.Response(503, request=httpx.Request(method, base + path))
+        return real(self, method, path, **kw)
+
+    sleeps = []
+    monkeypatch.setattr(remote.ControlPlaneClient, "request", flaky)
+    monkeypatch.setattr(worker.time, "sleep", sleeps.append)
+    settings = make_settings(tmp_path, agent_worker_token="worker-secret", reroute_api_base_url=base, airline_api_base_url=base)
+    AgentWorker(settings)
+    assert sleeps == [1.0, 2.0]
+
+
+def test_worker_fails_fast_on_wrong_token(live_control_plane, monkeypatch):
+    base, tmp_path = live_control_plane
+    from app.agent import worker
+
+    monkeypatch.setattr(worker.time, "sleep", lambda s: pytest.fail("a 4xx must not be retried"))
+    settings = make_settings(tmp_path, agent_worker_token="wrong-token", reroute_api_base_url=base, airline_api_base_url=base)
+    with pytest.raises(httpx.HTTPStatusError):
+        AgentWorker(settings)

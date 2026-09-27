@@ -49,6 +49,10 @@ sed -i -E 's#(/$NAME/reroute-(api|web)):[A-Za-z0-9._-]+#\1:$IMAGE_TAG#g' docker-
 grep -E 'image: .*/$NAME/reroute-(api|web):' docker-compose.yml
 docker compose pull --quiet
 docker compose up -d --remove-orphans
+# enable_openshell: the agent worker runs in an OpenShell sandbox pinned to an image - move it to the new one too
+if [ -x /opt/openshell/reroute/openshell-agent.sh ]; then
+  /opt/openshell/reroute/openshell-agent.sh start $REGISTRY/$NAME/reroute-api:$IMAGE_TAG
+fi
 for i in \$(seq 1 60); do
   if curl -fs -o /dev/null http://127.0.0.1:8000/api/health && curl -fs -o /dev/null http://127.0.0.1:3000/; then
     echo "healthy after \$((i * 5))s"; docker compose ps; docker image prune -f >/dev/null; exit 0

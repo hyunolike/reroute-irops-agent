@@ -94,6 +94,18 @@ variable "demo_mode" {
   default = true
 }
 
+variable "enable_openshell" {
+  description = "Run the agent as a DB-less worker inside an NVIDIA OpenShell sandbox on the app host (AGENT_EXECUTION=remote). Installs Docker >= 28 if needed and the OpenShell gateway."
+  type        = bool
+  default     = false
+}
+
+variable "openshell_version" {
+  description = "NVIDIA OpenShell release installed on the app host when enable_openshell = true."
+  type        = string
+  default     = "0.1.1"
+}
+
 variable "enable_cloudfront" {
   description = "HTTPS without a domain: put CloudFront (https://<id>.cloudfront.net) in front of the ALB and accept traffic only from it. Alternative to certificate_arn."
   type        = bool

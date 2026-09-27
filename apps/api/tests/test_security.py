@@ -19,7 +19,7 @@ def test_policy_file_uses_documented_schema(policy):
     raw = yaml.safe_load(POLICY.read_text())
     assert raw["version"] == 1
     assert set(raw) <= {"version", "filesystem_policy", "landlock", "process", "network_policies"}
-    assert raw["process"]["run_as_user"] == "sandbox"
+    assert raw["process"]["run_as_user"] == "10001"  # the image's non-root `reroute` user
     for pol in raw["network_policies"].values():
         assert pol["binaries"] and pol["endpoints"]
         for ep in pol["endpoints"]:

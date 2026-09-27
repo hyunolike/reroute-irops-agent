@@ -17,6 +17,10 @@ services:
     <<: *api
     environment:
       APP_ROLE: airline
+%{ if enable_openshell ~}
+    # The OpenShell-sandboxed agent worker reaches the airline API on the host (security group keeps 8001 private).
+    ports: ["8001:8000"]
+%{ endif ~}
 
   reroute-api:
     <<: *api

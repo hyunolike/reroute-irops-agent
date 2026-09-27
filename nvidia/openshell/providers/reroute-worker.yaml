@@ -1,0 +1,29 @@
+# OpenShell provider profile: the agent worker's token for ReRoute's internal agent API.
+# The worker sends X-Agent-Worker-Token with a placeholder; the OpenShell proxy substitutes the real token only on
+# the control-plane endpoint, so the token never exists inside the sandbox. Rules mirror reroute-agent.yaml.
+# __CONTROL_PLANE_HOST__ is replaced at install time (infra/deploy/openshell-agent.sh).
+id: reroute-worker
+display_name: ReRoute control plane (agent worker)
+description: X-Agent-Worker-Token for the ReRoute internal agent API
+category: other
+credentials:
+  - name: worker_token
+    description: ReRoute agent worker token
+    env_vars: [AGENT_WORKER_TOKEN]
+    required: true
+    auth_style: header
+    header_name: x-agent-worker-token
+discovery:
+  credentials: [worker_token]
+endpoints:
+  - host: __CONTROL_PLANE_HOST__
+    port: 8000
+    protocol: rest
+    enforcement: enforce
+    rules:
+      - allow: { method: GET, path: "/api/policies/search" }
+      - allow: { method: POST, path: "/api/optimization/rebooking" }
+      - allow: { method: POST, path: "/internal/agent/**" }
+      - allow: { method: GET, path: "/internal/agent/**" }
+      - allow: { method: PATCH, path: "/internal/agent/tasks/*" }
+binaries: [/app/.venv/bin/python*, /usr/local/bin/python*]
