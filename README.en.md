@@ -21,6 +21,7 @@ https://github.com/user-attachments/assets/3676a23d-fc44-42bb-8b70-774336f012c3
 
 | Quick links | |
 |---|---|
+| 🌐 Live demo (AWS) | https://d6z72s9r7a9wt.cloudfront.net · online during the judging period only |
 | 🎬 Demo in one command | `docker compose up --build` → http://localhost:3000 → **Run Agent** |
 | 🎞️ 21-second launch video | [docs/video/reroute-launch.mp4](docs/video/reroute-launch.mp4) — cancellation → one-sentence command → cuOpt re-accommodation → human approval |
 | 📖 3-minute judge guide | http://localhost:3000/guide · [docs/demo-scenario.md](docs/demo-scenario.md) |
@@ -185,8 +186,12 @@ REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://<host>/mcp                 
 
 - Two modes: OpenClaw **plans itself** (`open_recovery_task` → tools → `propose_rebooking`) or **delegates** to ReRoute's agent (`delegate_recovery`).
 - The dashboard detects tasks started by external agents and offers to follow them live.
-- Status: the MCP server is tested over real HTTP (legacy and modern protocol, guardrails and approval boundary). **A real NemoClaw/OpenClaw
-  sandbox has not been connected yet** (no NemoClaw or HTTPS endpoint in this environment). Procedure: [nvidia/nemoclaw](nvidia/nemoclaw/README.md)
+- **Send from the dashboard:** pick **OpenClaw (NemoClaw)** above the command box. A bridge on the NemoClaw host
+  (`infra/openclaw-bridge`) takes the task and hands it to OpenClaw, which attaches to **the same task** over MCP, so the operator
+  watches and approves on the same timeline. The bridge only makes outbound calls; the option is disabled while it is offline.
+- Status: verified live - OpenClaw in a NemoClaw sandbox drove KE123 to a plan awaiting approval through ReRoute's HTTPS MCP endpoint.
+  In the live demo NemoClaw runs on a GCP VM. The hosted NVIDIA endpoint often answers "overloaded", so the bridge retries and a task
+  can take a few minutes. Procedure: [nvidia/nemoclaw](nvidia/nemoclaw/README.md)
 
 ## NVIDIA stack & run modes
 
@@ -196,6 +201,16 @@ REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://<host>/mcp                 
 | `RETRIEVER_PROVIDER` | `nvidia` → `nemotron-3-embed-1b` + `llama-nemotron-rerank-vl-1b-v2` | `lexical` → BM25 over the same documents |
 | `OPTIMIZATION_PROVIDER` | `cuopt` → cuOpt server (GPU) | `fallback` → HiGHS (CPU), **same** MILP object |
 | `SECURITY_RUNTIME` | `openshell` → agent worker inside an OpenShell sandbox | `policy-mirror` → same policy YAML evaluated in-process |
+
+Live demo (AWS) as deployed now:
+
+| Component | In use |
+|---|---|
+| Reasoning | Nemotron (`nemotron-3-super-120b-a12b`, NVIDIA NIM) |
+| Policy retrieval | NeMo Retriever (`nemotron-3-embed-1b` + `llama-nemotron-rerank-vl-1b-v2`) |
+| Optimization | HiGHS on CPU - the free-plan AWS account cannot launch GPU instances, so the same MILP runs without cuOpt |
+| Agent isolation | **worker inside an OpenShell sandbox** (`enable_openshell`); the NVIDIA key and worker token are injected by providers, the sandbox only holds placeholders |
+| External agent | OpenClaw (NemoClaw on a GCP VM), selectable on the dashboard |
 
 **Honesty rule:** runtime chips and every timeline badge show the implementation that actually ran — green for NVIDIA, amber for
 fallbacks. A fallback is never labelled as NVIDIA; automatic fallbacks are recorded as `GUARDRAIL` events.
@@ -233,7 +248,7 @@ open http://localhost:3000      # API docs: http://localhost:8000/docs
 
 ```bash
 make install                    # uv venv (Python 3.12) + npm ci
-make test                       # 91 backend tests
+make test                       # 99 backend tests
 DATABASE_URL=sqlite:///./reroute.db make dev-api    # or a local PostgreSQL
 make dev-web                    # http://localhost:3000 (proxies /api to :8000)
 ```
@@ -244,7 +259,8 @@ One-shot deployment to AWS with Terraform. Full procedure and checklist: [infra/
 
 ```mermaid
 flowchart TB
-    user([Judges · operators]) -->|"HTTP/HTTPS"| alb
+    user([Judges · operators]) -->|"HTTPS"| cf["CloudFront<br/>(HTTPS without a domain)"]
+    cf -->|"HTTP + secret header"| alb
     admin([Admin]) -.->|"SSM Session Manager (no SSH)"| ec2
     subgraph vpc["VPC 10.40.0.0/16 (Seoul by default)"]
         subgraph pub["Public subnets"]
@@ -252,11 +268,12 @@ flowchart TB
             nat["NAT Gateway"]
         end
         subgraph priv["Private subnets"]
-            subgraph ec2["EC2 g6.xlarge (GPU) · Deep Learning AMI · docker compose"]
+            subgraph ec2["EC2 (g6.xlarge GPU by default, CPU in the live demo) · docker compose"]
                 web["web :3000"]
                 api["reroute-api :8000"]
                 air["airline-service"]
-                cu["cuOpt server (GPU)"]
+                cu["cuOpt server (with GPU)"]
+                sb["OpenShell sandbox<br/>agent worker"]
             end
             rds[("RDS PostgreSQL 16<br/>encrypted · private")]
         end
@@ -268,6 +285,7 @@ flowchart TB
     api --> cu
     api --> rds
     air --> rds
+    sb -->|"allowed paths only"| api
     ec2 --> nat --> nim["NVIDIA NIM<br/>integrate.api.nvidia.com"]
     ec2 -.-> sm["Secrets Manager<br/>DB password · signing key · NVIDIA key"]
     ec2 -.-> ecr["ECR"]
@@ -285,7 +303,16 @@ cd infra/terraform && terraform apply && terraform output url       # 4) everyth
 
 > ⚠️ Before deploying: **GPU instance quota** (often 0 on new accounts), **g6 availability in your region** (else `g5.xlarge`),
 > **register the NVIDIA key before the host is created**. Run `terraform destroy` after the demo. `enable_gpu = false` gives a
-> cheaper CPU-only setup. Terraform passes `terraform validate`; it has not been applied yet.
+> cheaper CPU-only setup.
+
+The live demo was deployed with this Terraform (CPU setup). After that, merging to `develop` makes GitHub Actions build the images,
+push them to ECR and roll the host over SSM (OIDC, no AWS keys stored in GitHub). Optional features are one variable each:
+
+| Variable | Effect |
+|---|---|
+| `enable_cloudfront` | HTTPS without a domain; the ALB accepts only CloudFront |
+| `enable_openshell` | run the agent as a worker inside an OpenShell sandbox; upgrades Docker below 28 at boot (moby#34143) |
+| `github_repository` | create the OIDC role for GitHub Actions deploys |
 
 ## Security
 
@@ -349,7 +376,7 @@ Full-page views: [plan](docs/screenshots/03b-plan-full.png) · [completed](docs/
 
 ```
 apps/api      FastAPI: mock airline API, agent (orchestrator, tools, LLM adapters), RAG, optimization,
-              approval gateway, audit, OpenShell policy mirror, worker, MCP server — 91 tests
+              approval gateway, audit, OpenShell policy mirror, worker, MCP server, OpenClaw bridge — 99 tests
 apps/web      Next.js + TypeScript + Tailwind operations dashboard and judge guide
 documents     airline policy corpus (IROP, RBK, SSR, FARE, VIP, MCT) with machine-readable params
 data/seed     KE123 scenario: 9 flights, 35 passengers
@@ -362,7 +389,8 @@ tests/e2e     smoke test of the MVP definition of done
 
 ## Quality
 
-- 91 backend tests: flight / passenger lookup, policy retrieval & provenance, every optimization constraint (C1–C6), weights, cuOpt REST contract, approval required, unauthorized execution blocked, token tampering, expiry, successful rebooking, OpenShell policy schema & decisions, NIM request contract & fallback, DB-less remote worker over real HTTP, schema migration.
+- 99 backend tests: flight / passenger lookup, policy retrieval & provenance, every optimization constraint (C1–C6), weights, cuOpt REST contract, approval required, unauthorized execution blocked, token tampering, expiry, successful rebooking, OpenShell policy schema & decisions, NIM request contract, retries & fallback, DB-less remote worker over real HTTP (waits for the control plane at start), MCP server, dashboard → OpenClaw bridge, schema migration.
+- Real NVIDIA model evaluation (`make eval-llm`) and OpenShell denials checked in the live AWS sandbox (self-approval, metadata, unregistered hosts).
 - End-to-end smoke test (`tests/e2e/smoke.sh`) and a Playwright walkthrough of the dashboard.
 - CI: lint, tests + smoke on PostgreSQL, web typecheck/build, `terraform validate`, Docker builds.
 

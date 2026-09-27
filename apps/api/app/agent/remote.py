@@ -40,11 +40,15 @@ class ControlPlaneClient:
         logical_host: str = "reroute-api",
         logical_port: int = 8000,
         timeout: float = 30.0,
+        security_runtime: str = "policy-mirror",
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.policy = policy
         self.logical = (logical_host, logical_port)
-        self.http = httpx.Client(timeout=timeout, headers={"X-Agent-Worker-Token": token})
+        # The control plane shows operators where the agent really runs (e.g. "openshell" inside the sandbox).
+        self.http = httpx.Client(
+            timeout=timeout, headers={"X-Agent-Worker-Token": token, "X-Agent-Security-Runtime": security_runtime}
+        )
 
     def request(self, method: str, path: str, **kw: Any) -> httpx.Response:
         d = self.policy.check_network(method, *self.logical, urlsplit(path).path)

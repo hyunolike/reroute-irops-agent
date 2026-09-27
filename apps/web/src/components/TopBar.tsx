@@ -66,8 +66,8 @@ export function TopBar({ runtime, onReset, resetting }: { runtime: Runtime | nul
               <RuntimeChip
                 icon={<Shield className="h-4 w-4" />}
                 label="Sandbox"
-                value={runtime.security.runtime === "openshell" ? "OpenShell" : "Policy mirror"}
-                nvidia={runtime.security.runtime === "openshell"}
+                value={(runtime.security.agent_runtime ?? runtime.security.runtime) === "openshell" ? "OpenShell" : "Policy mirror"}
+                nvidia={(runtime.security.agent_runtime ?? runtime.security.runtime) === "openshell"}
                 title={runtime.security.enforced_by}
               />
             </>

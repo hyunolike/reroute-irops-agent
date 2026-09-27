@@ -20,6 +20,7 @@ https://github.com/user-attachments/assets/3676a23d-fc44-42bb-8b70-774336f012c3
 
 | 바로가기 | |
 |---|---|
+| 🌐 라이브 데모 (AWS) | https://d6z72s9r7a9wt.cloudfront.net · 시연 기간에만 운영합니다 |
 | 🎬 명령 한 줄로 데모 | `docker compose up --build` → http://localhost:3000 → **Run Agent** |
 | 🎞️ 21초 런칭 영상 | [docs/video/reroute-launch.mp4](docs/video/reroute-launch.mp4) — 결항 → 한 문장 지시 → cuOpt 재배정 → 사람 승인 흐름 |
 | 📖 심사위원 3분 가이드 | http://localhost:3000/guide · [발표 대본 (영문)](docs/demo-scenario.md) |
@@ -183,7 +184,8 @@ REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://<도메인>/mcp            
 
 - 두 가지 방식: OpenClaw가 **직접 계획**(`open_recovery_task` → 도구들 → `propose_rebooking`)하거나, ReRoute 에이전트에게 **위임**(`delegate_recovery`)합니다.
 - 대시보드는 외부 에이전트가 시작한 작업을 감지해 "실시간으로 보기" 배너를 띄웁니다.
-- 검증 상태: MCP 서버는 실제 HTTP로 테스트했습니다(구·신 프로토콜 모두, 가드레일·승인 경계 포함). **실제 NemoClaw/OpenClaw 샌드박스와의 연결은 아직 실행하지 않았습니다**(이 환경에 NemoClaw·HTTPS 엔드포인트 없음). 절차: [nvidia/nemoclaw](nvidia/nemoclaw/README.md)
+- **대시보드에서 OpenClaw로 보내기:** 입력창 위에서 **OpenClaw (NemoClaw)**를 고르면, NemoClaw 호스트의 브리지(`infra/openclaw-bridge`)가 작업을 가져가 OpenClaw에 넘깁니다. OpenClaw는 MCP로 **같은 작업**에 붙어 계획하므로 타임라인에서 그대로 지켜보고 승인하면 됩니다. 브리지는 바깥으로만 연결하고, 연결이 끊기면 선택지가 비활성화됩니다.
+- 검증 상태: NemoClaw 샌드박스 안의 OpenClaw가 AWS의 HTTPS MCP 주소로 KE123을 승인 대기까지 처리하는 것을 실제로 확인했습니다. 라이브 데모에서는 NemoClaw가 GCP VM에서 돌고 있습니다. NVIDIA 무료 엔드포인트가 자주 과부하를 돌려줘 브리지가 재시도하므로, 한 작업에 몇 분 걸릴 수 있습니다. 절차: [nvidia/nemoclaw](nvidia/nemoclaw/README.md)
 
 ## NVIDIA 스택과 실행 모드
 
@@ -193,6 +195,16 @@ REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://<도메인>/mcp            
 | `RETRIEVER_PROVIDER` | `nvidia` → `nemotron-3-embed-1b` + `llama-nemotron-rerank-vl-1b-v2` | `lexical` → 같은 문서에 대한 BM25 검색 |
 | `OPTIMIZATION_PROVIDER` | `cuopt` → cuOpt 서버 (GPU) | `fallback` → HiGHS (CPU), **같은** MILP 객체 |
 | `SECURITY_RUNTIME` | `openshell` → OpenShell 샌드박스 안의 에이전트 worker | `policy-mirror` → 같은 정책 YAML을 프로세스 안에서 평가 |
+
+라이브 데모(AWS)의 현재 구성:
+
+| 구성 요소 | 지금 쓰는 것 |
+|---|---|
+| 추론 | Nemotron (`nemotron-3-super-120b-a12b`, NVIDIA NIM) |
+| 규정 검색 | NeMo Retriever (`nemotron-3-embed-1b` + `llama-nemotron-rerank-vl-1b-v2`) |
+| 최적화 | HiGHS (CPU). 무료 플랜 계정이라 GPU 인스턴스를 쓸 수 없어 cuOpt 대신 같은 MILP를 CPU로 풉니다 |
+| 에이전트 격리 | **OpenShell 샌드박스 안의 worker** (`enable_openshell`). NVIDIA 키와 worker 토큰은 provider가 주입해 샌드박스에는 placeholder만 있습니다 |
+| 외부 에이전트 | OpenClaw (NemoClaw, GCP VM), 대시보드에서 선택 |
 
 **정직성 원칙:** 대시보드 상단 표시등과 타임라인의 모든 배지는 **실제로 실행된 구현**을 보여줍니다. NVIDIA 서비스는 초록색,
 대체 구현은 주황색입니다. 대체 구현을 NVIDIA로 표시하는 일은 없으며, 자동 전환이 일어나면 `GUARDRAIL` 이벤트로 기록합니다.
@@ -230,7 +242,7 @@ open http://localhost:3000      # API 문서: http://localhost:8000/docs
 
 ```bash
 make install                    # uv 가상환경(Python 3.12) + npm ci
-make test                       # 백엔드 테스트 91개
+make test                       # 백엔드 테스트 99개
 DATABASE_URL=sqlite:///./reroute.db make dev-api    # 또는 로컬 PostgreSQL
 make dev-web                    # http://localhost:3000 (/api는 :8000으로 프록시)
 ```
@@ -241,7 +253,8 @@ Terraform으로 AWS에 한 번에 배포합니다. 상세 절차와 체크리스
 
 ```mermaid
 flowchart TB
-    user([심사위원 · 운영자]) -->|"HTTP/HTTPS"| alb
+    user([심사위원 · 운영자]) -->|"HTTPS"| cf["CloudFront<br/>(도메인 없이 HTTPS)"]
+    cf -->|"HTTP + 비밀 헤더"| alb
     admin([관리자]) -.->|"SSM Session Manager (SSH 없음)"| ec2
     subgraph vpc["VPC 10.40.0.0/16 (서울 리전 기본)"]
         subgraph pub["퍼블릭 서브넷"]
@@ -249,11 +262,12 @@ flowchart TB
             nat["NAT Gateway"]
         end
         subgraph priv["프라이빗 서브넷"]
-            subgraph ec2["EC2 g6.xlarge (GPU) · Deep Learning AMI · docker compose"]
+            subgraph ec2["EC2 (기본 g6.xlarge GPU, 라이브 데모는 CPU) · docker compose"]
                 web["web :3000"]
                 api["reroute-api :8000"]
                 air["airline-service"]
-                cu["cuOpt 서버 (GPU)"]
+                cu["cuOpt 서버 (GPU일 때)"]
+                sb["OpenShell 샌드박스<br/>에이전트 worker"]
             end
             rds[("RDS PostgreSQL 16<br/>암호화 · 비공개")]
         end
@@ -265,6 +279,7 @@ flowchart TB
     api --> cu
     api --> rds
     air --> rds
+    sb -->|"허용된 경로만"| api
     ec2 --> nat --> nim["NVIDIA NIM<br/>integrate.api.nvidia.com"]
     ec2 -.-> sm["Secrets Manager<br/>DB 비밀번호 · 서명 키 · NVIDIA 키"]
     ec2 -.-> ecr["ECR 이미지 저장소"]
@@ -282,7 +297,15 @@ cd infra/terraform && terraform apply && terraform output url       # 4) 전체 
 
 > ⚠️ 배포 전 확인: **GPU 인스턴스 할당량**(새 계정은 0인 경우가 많음), **서울 리전의 g6 제공 여부**(없으면 `g5.xlarge`),
 > **NVIDIA 키는 서버 생성 전에 등록**. 시연 후에는 `terraform destroy`. `enable_gpu = false`로 두면 CPU 전용의 저렴한 구성입니다.
-> Terraform은 `terraform validate`까지 통과했고, 실제 `apply`는 아직 해 보지 않았습니다.
+
+라이브 데모는 이 Terraform으로 실제 배포했습니다(CPU 구성). 이후 변경은 `develop`에 머지하면 GitHub Actions가 이미지를 빌드해
+ECR에 올리고 SSM으로 서버를 교체합니다(OIDC 인증, AWS 키를 GitHub에 저장하지 않음). 선택 기능은 변수 하나로 켭니다.
+
+| 변수 | 효과 |
+|---|---|
+| `enable_cloudfront` | 도메인 없이 HTTPS. ALB는 CloudFront에서 온 요청만 받습니다 |
+| `enable_openshell` | 에이전트를 OpenShell 샌드박스 안의 worker로 실행. Docker 28 미만이면 부팅 때 올립니다(moby#34143) |
+| `github_repository` | GitHub Actions 배포용 OIDC 역할 생성 |
 
 ## 보안
 
@@ -350,7 +373,7 @@ C6  항공사·시간 한도·운항 상태가 규정상 허용   (IROP-002, IRO
 
 ```
 apps/api      FastAPI: Mock 항공사 API, 에이전트(오케스트레이터·도구·LLM 어댑터), RAG, 최적화,
-              승인 게이트웨이, 감사 로그, OpenShell 정책 평가, worker, MCP 서버 — 테스트 91개
+              승인 게이트웨이, 감사 로그, OpenShell 정책 평가, worker, MCP 서버, OpenClaw 브리지 — 테스트 99개
 apps/web      Next.js + TypeScript + Tailwind 운영 대시보드와 심사위원 가이드
 documents     항공사 규정 문서 (IROP, RBK, SSR, FARE, VIP, MCT) + 기계가 읽는 파라미터
 data/seed     KE123 시나리오: 항공편 9편, 승객 35명
@@ -363,9 +386,10 @@ tests/e2e     MVP 완료 기준 자동 점검
 
 ## 품질
 
-- 백엔드 테스트 91개: 운항·승객 조회, 규정 검색과 출처, 최적화 제약 C1–C6 전부, 가중치, cuOpt REST 형식,
-  승인 필수, 무단 실행 차단, 토큰 변조, 승인 만료, 재배정 성공, OpenShell 정책 스키마와 판정, NIM 요청 형식과 장애 시 전환,
-  DB 없는 원격 worker(실제 HTTP), 스키마 마이그레이션.
+- 백엔드 테스트 99개: 운항·승객 조회, 규정 검색과 출처, 최적화 제약 C1–C6 전부, 가중치, cuOpt REST 형식,
+  승인 필수, 무단 실행 차단, 토큰 변조, 승인 만료, 재배정 성공, OpenShell 정책 스키마와 판정, NIM 요청 형식과 재시도·장애 시 전환,
+  DB 없는 원격 worker(실제 HTTP, 시작 시 컨트롤 플레인 대기), MCP 서버, 대시보드→OpenClaw 브리지, 스키마 마이그레이션.
+- 실제 NVIDIA 모델 평가(`make eval-llm`)와 AWS 라이브 데모의 OpenShell 샌드박스 금지 행동 점검(자기 승인, 메타데이터, 미등록 호스트).
 - 전체 흐름 자동 점검(`tests/e2e/smoke.sh`)과 Playwright 브라우저 시연.
 - CI: 코드 검사, PostgreSQL에서 테스트와 자동 점검, 웹 타입 검사·빌드, `terraform validate`, Docker 이미지 빌드.
 

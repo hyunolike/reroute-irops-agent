@@ -35,7 +35,8 @@ export function SecurityPanel({ onProbe }: { onProbe: () => void }) {
     }
   };
 
-  const mirror = policy?.runtime !== "openshell";
+  const agentRuntime = policy?.agent_runtime ?? policy?.runtime;
+  const mirror = agentRuntime !== "openshell";
   return (
     <Panel
       title="Agent Sandbox · OpenShell Policy"
@@ -57,6 +58,9 @@ export function SecurityPanel({ onProbe }: { onProbe: () => void }) {
           ) : (
             <>
               <b>OpenShell mode:</b> 에이전트가 NVIDIA OpenShell 샌드박스 안에서 실행 중이며, 네트워크/파일시스템 정책은 OpenShell이 강제합니다.
+              {policy.runtime !== "openshell" && (
+                <> 아래 프로브는 같은 정책 파일을 컨트롤 플레인이 평가한 결과로, 샌드박스가 무엇을 허용·차단하는지 보여 줍니다.</>
+              )}
             </>
           )}
         </div>

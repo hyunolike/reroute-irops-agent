@@ -43,7 +43,9 @@ export interface Runtime {
   llm: { provider: string; model: string; nvidia: boolean; reason?: string };
   retriever: { provider: string; nvidia: boolean; models: string[] };
   optimizer: { provider: string; nvidia: boolean; endpoint: string | null; fallback_enabled: boolean; health?: { ok: boolean } };
-  security: { runtime: string; policy_file: string; enforced_by: string };
+  /** runtime = this control plane's setting; agent_runtime = where ReRoute's agent actually runs (remote worker aware) */
+  security: { runtime: string; agent_runtime?: string; policy_file: string; enforced_by: string };
+  agent?: { execution: string; worker?: { connected: boolean; security: string | null; last_seen: string | null } };
   approval: { ttl_minutes: number; required_for: string[] };
   tools: { name: string; mutating: boolean }[];
   /** OpenClaw bridge on the NemoClaw host (heartbeat within the last 30 s = connected) */
@@ -185,6 +187,7 @@ export interface AuditEntry {
 
 export interface SecurityPolicy {
   runtime: string;
+  agent_runtime?: string;
   source: string;
   filesystem: { include_workdir?: boolean; read_only?: string[]; read_write?: string[] };
   process: Record<string, string>;

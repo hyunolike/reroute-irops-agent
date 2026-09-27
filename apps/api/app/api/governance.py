@@ -140,7 +140,12 @@ class Probe(BaseModel):
 
 @router.get("/security/policy")
 def security_policy(c: Container = Depends(get_container)) -> dict:
-    return {"runtime": c.settings.security_runtime, **c.policy.summary(), "probes": PRESET_PROBES}
+    return {
+        "runtime": c.settings.security_runtime,
+        "agent_runtime": c.agent_security_runtime(),
+        **c.policy.summary(),
+        "probes": PRESET_PROBES,
+    }
 
 
 @router.post("/security/probes")

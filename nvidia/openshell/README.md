@@ -14,13 +14,16 @@ It uses only keys documented in the OpenShell policy schema (`version`, `filesys
 | `POST integrate.api.nvidia.com /v1/chat/completions` | `nvidia_inference` | Nemotron via NIM — nothing else on that host |
 | everything else | — | deny by default (e.g. `unknown-external-api.com`, cloud metadata `169.254.169.254`) |
 | filesystem | `filesystem_policy` | `/app` read-only (code, policies), writes only to `/sandbox/work`, `/tmp`; `~/.ssh` is unreachable |
-| process | `process` | runs as `sandbox`, never root |
+| process | `process` | runs as UID 10001 (the image's `reroute` user), never root |
 
 ## Two ways the policy is enforced
 
-1. **OpenShell mode (real)** – `scripts/create-sandbox.sh` starts `python -m app.agent.worker` inside an
-   OpenShell sandbox with this policy (`SECURITY_RUNTIME=openshell`). The worker has **no database
-   credentials** and **no approval-signing key**; the NVIDIA key is injected by an OpenShell provider.
+1. **OpenShell mode (real)** – the agent worker (`python -m app.agent.worker`) runs inside an OpenShell sandbox
+   with this policy (`SECURITY_RUNTIME=openshell`). This is how the **live AWS demo** runs
+   (`enable_openshell`, set up by `infra/deploy/openshell-agent.sh`); on a workstation use `scripts/create-sandbox.sh`.
+   The worker has **no database credentials** and **no approval-signing key**; the NVIDIA key and the worker token
+   are OpenShell providers (`providers/`), so the sandbox only holds placeholders the proxy swaps on allowed paths.
+   Requires Docker Engine ≥ 28 for the Docker driver (moby#34143), and hostnames the host's upstream DNS resolves.
    `scripts/probes.sh` demonstrates ALLOW/DENY from inside the sandbox and `openshell term` shows live
    decisions. `scripts/ingest-logs.sh` imports OpenShell's OCSF decisions into ReRoute's audit log
    (`enforced_by=openshell`).

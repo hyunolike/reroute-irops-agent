@@ -23,12 +23,17 @@ from app.container import Container
 from app.domain.models import OptimizationResult, PolicyHit
 
 
-def require_worker(x_agent_worker_token: str | None = Header(default=None), c: Container = Depends(get_container)) -> None:
+def require_worker(
+    x_agent_worker_token: str | None = Header(default=None),
+    x_agent_security_runtime: str | None = Header(default=None),
+    c: Container = Depends(get_container),
+) -> None:
     expected = c.settings.agent_worker_token
     if expected is None:
         raise HTTPException(404, "remote agent execution is not enabled")
     if not x_agent_worker_token or not hmac.compare_digest(x_agent_worker_token, expected.get_secret_value()):
         raise HTTPException(401, "invalid worker token")
+    c.worker_seen(x_agent_security_runtime)
 
 
 router = APIRouter(prefix="/internal/agent", tags=["internal: agent worker"], dependencies=[Depends(require_worker)])
