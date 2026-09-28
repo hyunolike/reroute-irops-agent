@@ -29,6 +29,15 @@ https://github.com/user-attachments/assets/3676a23d-fc44-42bb-8b70-774336f012c3
 | 🟩 NVIDIA integration & verification status | [docs/nvidia-integration.md](docs/nvidia-integration.md) · [nvidia/](nvidia/) |
 | ☁️ AWS deployment (Terraform) | [infra/terraform/README.en.md](infra/terraform/README.en.md) · [한국어](infra/terraform/README.md) |
 
+### 📝 Dev blog — "An Agent Where the LLM Doesn't Decide" (Korean)
+
+A two-part write-up of the design decisions behind this repository (ReRoute).
+
+| Part | Post | What it covers |
+|---|---|---|
+| 1 | [Why we separated computation from approval in flight rebooking](https://hyunolike.tistory.com/73) | The LLM only picks the next action, cuOpt computes seat allocation, and booking changes wait for operator approval |
+| 2 | [OpenShell isolation and OpenClaw MCP integration](https://hyunolike.tistory.com/74) | Moving the agent into OpenShell sandboxes and attaching OpenClaw via MCP so policy is enforced at the infrastructure level, not just in code |
+
 ---
 
 ## Contents
