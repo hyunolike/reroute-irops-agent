@@ -28,6 +28,15 @@ https://github.com/user-attachments/assets/3676a23d-fc44-42bb-8b70-774336f012c3
 | 🟩 NVIDIA 연동 방식과 검증 수준 | [docs/nvidia-integration.md (영문)](docs/nvidia-integration.md) · [nvidia/](nvidia/) |
 | ☁️ AWS 배포 (Terraform) | [infra/terraform/README.md](infra/terraform/README.md) · [English](infra/terraform/README.en.md) · 아래 [AWS 배포](#aws-배포) 절 |
 
+### 📝 개발기 블로그 — 「LLM이 결정하지 않는 에이전트」 시리즈
+
+이 저장소(ReRoute)를 만들면서 내린 설계 결정을 두 편의 글로 정리했습니다.
+
+| 편 | 글 | 다루는 내용 |
+|---|---|---|
+| 1편 | [항공 결항 재배정에서 계산과 승인을 분리한 이유](https://hyunolike.tistory.com/73) | LLM은 다음 행동만 고르고 좌석 배정은 cuOpt가 계산하며, 예약 변경은 운영자 승인을 거치도록 역할을 나눈 과정 |
+| 2편 | [OpenShell 격리와 OpenClaw MCP 연동](https://hyunolike.tistory.com/74) | 에이전트를 OpenShell 샌드박스로 옮기고 OpenClaw를 MCP로 붙여, 정책이 코드가 아닌 인프라 수준에서 지켜지게 만든 과정 |
+
 ---
 
 ## 목차
