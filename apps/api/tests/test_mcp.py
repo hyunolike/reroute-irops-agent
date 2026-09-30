@@ -85,6 +85,7 @@ async def test_tool_surface_has_no_approval_power(live, mode):
         "search_rebooking_policy",
         "optimize_rebooking",
         "explore_exception_options",
+        "propose_exception_resolution",
         "propose_rebooking",
         "finish_without_action",
         "delegate_recovery",
@@ -123,6 +124,28 @@ async def test_external_agent_drives_full_workflow_with_same_guardrails(live):
         assert opt["summary"]["auto_assigned"] == 31
         p010 = await tool(client, "explore_exception_options", task_id=tid, passenger_id="P010")
         assert any(o["flight_no"] == "7C1102" for o in p010["options"])
+        # the same verifier guards an external planner's recommendations
+        bad = await tool(
+            client,
+            "propose_exception_resolution",
+            task_id=tid,
+            passenger_id="P010",
+            action="REASSIGN_TO_OPTION",
+            flight_no="7C1102",
+            rationale="saves the SQ637 connection",
+        )
+        assert bad["verdict"] == "REJECTED" and bad["violations"][0].startswith("CONSTRAINT")
+        ok = await tool(
+            client,
+            "propose_exception_resolution",
+            task_id=tid,
+            passenger_id="P010",
+            action="REQUEST_POLICY_WAIVER",
+            flight_no="7C1102",
+            policy_ids=["IROP-002"],
+            rationale="saves the SQ637 connection",
+        )
+        assert ok["verdict"] == "PASS_REQUIRES_WAIVER" and ok["required_role"] == "duty_manager"
         proposed = await tool(client, "propose_rebooking", task_id=tid, flight_no="KE123")
         assert "human operator must approve" in proposed["next"]
 

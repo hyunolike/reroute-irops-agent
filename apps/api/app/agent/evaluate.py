@@ -31,6 +31,7 @@ from dotenv import dotenv_values
 
 from app.config import _DEFAULT_ROOT, Settings
 from app.main import create_app
+from app.resolution.baseline import baseline_proposal
 from app.seed.loader import seed_database
 
 
@@ -42,6 +43,8 @@ class Scenario:
     expect_tools: set[str] = field(default_factory=set)
     expect_summary: dict[str, int] = field(default_factory=dict)
     expect_policy: str | None = None
+    # every exception passenger gets a verified recommendation (exception_resolution_mode != "off")
+    expect_resolutions: bool = False
 
 
 SCENARIOS = [
@@ -58,6 +61,7 @@ SCENARIOS = [
             "propose_rebooking",
         },
         {"affected": 35, "auto_assigned": 31, "manual_review": 3, "no_feasible": 1},
+        expect_resolutions=True,
     ),
     Scenario(
         "KE123 cancellation (English)",
@@ -65,6 +69,7 @@ SCENARIOS = [
         "WAITING_APPROVAL",
         {"get_disrupted_flight", "optimize_rebooking", "propose_rebooking"},
         {"affected": 35, "auto_assigned": 31},
+        expect_resolutions=True,
     ),
     Scenario(
         "KE125 45-min delay",
@@ -100,6 +105,11 @@ async def run_scenario(sc: Scenario, workdir: Path, base: dict[str, Any]) -> dic
         task = (await client.get(f"/api/agent/tasks/{task['id']}")).json()
         events = (await client.get(f"/api/agent/tasks/{task['id']}/events", params={"stream": False})).json()["events"]
         plan = (await client.get(f"/api/rebooking/plans/{task['plan_id']}")).json() if task.get("plan_id") else None
+        resolutions = (
+            (await client.get(f"/api/rebooking/plans/{task['plan_id']}/exception-resolutions")).json()["metrics"]
+            if task.get("plan_id")
+            else None
+        )
     elapsed = time.perf_counter() - started
 
     tools = [e["detail"].get("tool") for e in events if e["type"] == "TOOL_CALL"]
@@ -117,6 +127,10 @@ async def run_scenario(sc: Scenario, workdir: Path, base: dict[str, Any]) -> dic
         checks["solver_result"] = False
     if sc.expect_policy:
         checks["policy_cited"] = sc.expect_policy in json.dumps(task.get("report") or {})
+    if sc.expect_resolutions and settings.exception_resolution_mode != "off":
+        checks["exceptions_resolved"] = bool(resolutions) and resolutions["coverage"] == 1.0
+    if resolutions:
+        resolutions["baseline_agreement"] = _baseline_agreement(events, resolutions["actions"])
     return {
         "scenario": sc.name,
         "passed": all(checks.values()),
@@ -131,7 +145,21 @@ async def run_scenario(sc: Scenario, workdir: Path, base: dict[str, Any]) -> dic
         "fallback": fallback,
         "seconds": round(elapsed, 1),
         "error": task.get("error"),
+        "resolutions": resolutions,
     }
+
+
+def _baseline_agreement(events: list[dict], actions: dict[str, str]) -> float | None:
+    """Share of exception passengers where the model chose the same action as the rule-based baseline."""
+    views = {
+        e["detail"]["passenger"]["passenger_id"]: e["detail"]
+        for e in events
+        if e["type"] == "TOOL_RESULT" and e["detail"].get("tool") == "explore_exception_options"
+    }
+    if not views:
+        return None
+    same = sum(actions.get(pid) == baseline_proposal(v).action.value for pid, v in views.items())
+    return round(same / len(views), 3)
 
 
 # Only the NVIDIA model settings (reasoning + retrieval): the rest of .env (AGENT_EXECUTION, SECURITY_RUNTIME, ...)
@@ -167,6 +195,15 @@ async def main_async(as_json: bool) -> int:
             print(f"       tools: {' → '.join(r['tool_sequence'])}")
             if r["guardrails"]:
                 print(f"       guidance/guardrails: {len(r['guardrails'])}  e.g. {r['guardrails'][0][:110]}")
+            res = r["resolutions"]
+            if res and res["exceptions"]:
+                print(
+                    f"       exceptions: {res['recommended']}/{res['exceptions']} recommended · "
+                    f"first-pass accepted {res['first_pass_accept_rate']} · "
+                    f"baseline agreement {res['baseline_agreement']} · actions {res['actions']}"
+                )
+                if res["violations"]:
+                    print(f"       verifier violations: {res['violations']}")
             if failed:
                 print(f"       failed checks: {failed}  error={r['error']}")
         print(f"\n{sum(r['passed'] for r in results)}/{len(results)} scenarios passed")

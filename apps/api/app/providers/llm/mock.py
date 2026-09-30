@@ -11,6 +11,8 @@ import re
 from typing import Any
 
 from app.providers.llm.base import LLMProvider, LLMResponse, ToolCall
+from app.resolution.baseline import baseline_proposal
+from app.resolution.models import ResolutionAction
 
 # Hangul counts as a word character, so "KE123편" has no \b - use explicit look-arounds.
 _FLIGHT_NO = re.compile(r"(?<![A-Z0-9])((?=[A-Z0-9]{2})(?:[A-Z]{2}|[A-Z]\d|\d[A-Z]))\s?(\d{2,4})(?!\d)")
@@ -63,9 +65,12 @@ class MockLLMProvider(LLMProvider):
         m = _FLIGHT_NO.search(user.upper())
         flight_no = f"{m.group(1)}{m.group(2)}" if m else None
 
+        issued = [sum(len(v) for v in called.values())]
+
         def call(name: str, **args: Any) -> ToolCall:
-            n = sum(len(v) for v in called.values())
-            return ToolCall(id=f"call_{n}_{name}", name=name, arguments=args, raw_arguments=json.dumps(args))
+            # ids must be unique within a turn too, or parallel calls' results overwrite each other
+            issued[0] += 1
+            return ToolCall(id=f"call_{issued[0]}_{name}", name=name, arguments=args, raw_arguments=json.dumps(args))
 
         if "get_disrupted_flight" not in called:
             if not flight_no:
@@ -155,6 +160,10 @@ class MockLLMProvider(LLMProvider):
                 tool_calls=[call("explore_exception_options", passenger_id=e["passenger_id"]) for e in exceptions],
                 model=self.model,
             )
+        if "propose_exception_resolution" in {t["function"]["name"] for t in tools}:
+            resp = self._resolve_exceptions(called, call)
+            if resp:
+                return resp
         if "propose_rebooking" not in called:
             return LLMResponse(
                 content="Solver returned an allocation. Submitting it to the operator for approval.",
@@ -162,3 +171,38 @@ class MockLLMProvider(LLMProvider):
                 model=self.model,
             )
         return LLMResponse(content="Plan submitted - waiting for operator approval.", model=self.model)
+
+    @staticmethod
+    def baseline(view: dict[str, Any]) -> dict[str, Any]:
+        return baseline_proposal(view).model_dump(mode="json", exclude_none=True)
+
+    def _resolve_exceptions(self, called: dict[str, list[dict]], call) -> LLMResponse | None:
+        """One rule-based proposal per explored passenger; a rejected one is corrected once to a refund."""
+        views = [self._last_json([e]) for e in called.get("explore_exception_options", [])]
+        views = [v for v in views if "passenger" in v]
+        attempts: dict[str, list[dict]] = {}
+        for e in called.get("propose_exception_resolution", []):
+            attempts.setdefault(e["args"]["passenger_id"].upper(), []).append(self._last_json([e]))
+        todo = [v for v in views if v["passenger"]["passenger_id"] not in attempts]
+        if todo:
+            return LLMResponse(
+                content=f"Recommending one grounded action for each of the {len(todo)} exception passengers.",
+                tool_calls=[call("propose_exception_resolution", **self.baseline(v)) for v in todo],
+                model=self.model,
+            )
+        retry = [pid for pid, a in attempts.items() if len(a) == 1 and a[0].get("verdict") == "REJECTED"]
+        if retry:
+            return LLMResponse(
+                content=f"The verifier rejected {', '.join(retry)} - falling back to a refund offer.",
+                tool_calls=[
+                    call(
+                        "propose_exception_resolution",
+                        passenger_id=pid,
+                        action=ResolutionAction.OFFER_REFUND.value,
+                        rationale="The verifier rejected the first recommendation; offer a refund with duty of care.",
+                    )
+                    for pid in retry
+                ],
+                model=self.model,
+            )
+        return None

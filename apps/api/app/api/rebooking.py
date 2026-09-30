@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_container
 from app.approval.gateway import ApprovalConflict, ApprovalError, ApprovalRequired, PlanNotFound
 from app.container import Container
-from app.db.models import Approval, RebookingPlan
+from app.db.models import Approval, ExceptionResolution, RebookingPlan
+from app.domain.enums import AssignmentStatus
+from app.resolution.metrics import resolution_metrics
+from app.resolution.models import ExceptionDecision
+from app.resolution.review import ExceptionReviewError
 
 router = APIRouter(prefix="/api/rebooking", tags=["rebooking & approval"])
 
@@ -36,6 +41,7 @@ def plan_view(p: RebookingPlan, a: Approval | None) -> dict:
             "approved_by": a.approved_by,
             "comment": a.comment,
             "approved_manual_item_ids": a.approved_manual_item_ids,
+            "exception_decisions": a.exception_decisions or [],
             "created_at": a.created_at.isoformat(),
             "approved_at": a.approved_at.isoformat() if a.approved_at else None,
             "expires_at": a.expires_at.isoformat(),
@@ -76,6 +82,8 @@ def _load(c: Container, plan_id: str) -> dict:
 class Decision(BaseModel):
     comment: str | None = Field(default=None, max_length=500)
     approved_manual_item_ids: list[str] = Field(default_factory=list)
+    # assist mode: accept / modify / reject the planner's recommendation per exception passenger
+    exception_decisions: list[ExceptionDecision] = Field(default_factory=list)
 
 
 def _operator(x_operator_id: str | None) -> str:
@@ -89,19 +97,90 @@ def get_plan(plan_id: str, c: Container = Depends(get_container)) -> dict:
     return _load(c, plan_id)
 
 
+def resolution_view(r: ExceptionResolution) -> dict:
+    return {
+        "passenger_id": r.passenger_id,
+        "attempt": r.attempt,
+        "action": r.action,
+        "proposal": r.proposal,
+        "verdict": r.verdict,
+        "violations": r.violations,
+        "required_role": r.required_role,
+        "final": r.final,
+        "mode": r.mode,
+        "planner": r.planner,
+        "prompt_version": r.prompt_version,
+        "created_at": r.created_at.isoformat(),
+    }
+
+
+@router.get("/plans/{plan_id}/exception-resolutions")
+async def exception_resolutions(plan_id: str, c: Container = Depends(get_container)) -> dict:
+    """Every recommendation the planner made for the plan's exception passengers, with the verifier's verdicts.
+
+    In shadow mode these are recorded for evaluation only: the approval flow and the operator console ignore them.
+    In assist mode the response also carries `recommendations`, each re-verified here, for the approval console.
+    """
+    try:
+        plan = c.gateway.get_plan(plan_id)
+    except PlanNotFound as e:
+        raise HTTPException(404, "plan not found") from e
+    rows = [resolution_view(r) for r in c.gateway.get_exception_resolutions(plan_id)]
+    exceptions = [
+        i.passenger_id
+        for i in plan.items
+        if i.status
+        in (AssignmentStatus.MANUAL_REVIEW.value, AssignmentStatus.NO_FEASIBLE.value, AssignmentStatus.HELD_FOR_OPERATOR.value)
+    ]
+    approval = c.gateway.get_approval(plan_id)
+    decisions = (approval.exception_decisions if approval else None) or []
+    out = {
+        "plan_id": plan_id,
+        "mode": c.settings.exception_resolution_mode,
+        "metrics": resolution_metrics(exceptions, rows, decisions),
+        "attempts": rows,
+        "decisions": decisions,
+    }
+    if c.settings.exception_resolution_mode == "assist":
+        # re-verified by the control plane: what the approval console shows the operator
+        try:
+            out["recommendations"] = await c.reviewer.recommendations(plan_id)
+        except httpx.HTTPError as e:
+            raise HTTPException(503, f"airline system unavailable for re-verification: {e}") from e
+    return out
+
+
 @router.post("/plans/{plan_id}/approve")
 async def approve(
     plan_id: str, body: Decision, x_operator_id: str | None = Header(default=None), c: Container = Depends(get_container)
 ) -> dict:
     operator = _operator(x_operator_id)
     try:
-        approval = c.gateway.approve(plan_id, operator, body.comment, body.approved_manual_item_ids)
+        # verified by the control plane against fresh inventory before anything is approved
+        decisions = await c.reviewer.review(plan_id, operator, body.exception_decisions)
+        approval = c.gateway.approve(plan_id, operator, body.comment, body.approved_manual_item_ids, decisions)
     except PlanNotFound as e:
         raise HTTPException(404, "plan not found") from e
     except ApprovalConflict as e:
         raise HTTPException(409, str(e)) from e
+    except ExceptionReviewError as e:
+        raise HTTPException(422, {"code": e.code, "message": str(e), "violations": e.details}) from e
     except ApprovalError as e:
-        raise HTTPException(403, str(e)) from e
+        raise HTTPException(403, {"code": e.code, "message": str(e)}) from e
+    task_id = c.gateway.get_plan(plan_id).task_id
+    for d in decisions:
+        if d["required_role"]:
+            c.audit.record(
+                agent=operator,
+                tool="approval-console",
+                target=f"plan:{plan_id} passenger:{d['passenger_id']} flight:{d['seat']['flight_no']}",
+                action="policy.waiver",
+                policy=",".join(d["proposal"]["policy_ids"]),
+                result="SUCCESS",
+                enforced_by="approval-gateway",
+                task_id=task_id,
+                details={"duty_manager": operator, "waived": d["waived"], "source": d["source"]},
+            )
     c.audit.record(
         agent=operator,
         tool="approval-console",
@@ -110,8 +189,12 @@ async def approve(
         policy="RBK-001",
         result="SUCCESS",
         enforced_by="approval-gateway",
-        task_id=c.gateway.get_plan(plan_id).task_id,
-        details={"approval_id": approval.id, "manual_items": approval.approved_manual_item_ids},
+        task_id=task_id,
+        details={
+            "approval_id": approval.id,
+            "manual_items": approval.approved_manual_item_ids,
+            "exception_decisions": {d["passenger_id"]: f"{d['decision']} {d['action'] or ''}".strip() for d in decisions},
+        },
     )
     plan = c.gateway.get_plan(plan_id)
     if c.settings.agent_execution == "remote":

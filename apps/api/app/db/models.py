@@ -167,6 +167,31 @@ class RebookingPlanItem(Base):
     plan: Mapped[RebookingPlan] = relationship(back_populates="items")
 
 
+class ExceptionResolution(Base):
+    """One attempt by the planner to resolve an exception passenger, with the verifier's verdict.
+
+    Every attempt is kept (not only the one that stood) so first-pass verification rates can be measured.
+    """
+
+    __tablename__ = "exception_resolutions"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    plan_id: Mapped[str] = mapped_column(ForeignKey("rebooking_plans.id"), index=True)
+    task_id: Mapped[str] = mapped_column(String(32), index=True)
+    passenger_id: Mapped[str] = mapped_column(String(32))
+    attempt: Mapped[int] = mapped_column(Integer)
+    action: Mapped[str] = mapped_column(String(32))
+    proposal: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    verdict: Mapped[str] = mapped_column(String(24))
+    violations: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    required_role: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    final: Mapped[bool] = mapped_column(Boolean, default=False)  # the attempt that stands for this passenger
+    mode: Mapped[str] = mapped_column(String(16), default="shadow")  # shadow: recorded, not shown to the operator
+    planner: Mapped[str] = mapped_column(String(64), default="")  # provider/model that wrote the proposal
+    prompt_version: Mapped[str] = mapped_column(String(32), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Approval(Base):
     __tablename__ = "approvals"
 
@@ -177,6 +202,8 @@ class Approval(Base):
     approved_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     approved_manual_item_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # operator decisions on exception recommendations (assist mode), as verified by the control plane
+    exception_decisions: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

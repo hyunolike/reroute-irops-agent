@@ -25,6 +25,9 @@ class AgentMemory:
     policy_queries: list[str] = field(default_factory=list)
     optimization: OptimizationResult | None = None
     exception_analyses: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # propose_exception_resolution: the verified proposal that stands per passenger, and every attempt made
+    resolutions: dict[str, Any] = field(default_factory=dict)  # passenger_id -> VerifiedProposal
+    resolution_attempts: list[Any] = field(default_factory=list)  # ResolutionAttempt
     briefing: str | None = None
     plan_id: str | None = None
     approval_id: str | None = None
@@ -38,6 +41,8 @@ class ToolContext:
     http: GovernedHttpClient
     gateway: Any  # ApprovalGateway (in-process) - typed loosely to avoid an import cycle
     write_briefing: Callable[[], Awaitable[str]] | None = None
+    # who is planning ({"planner": "provider/model", "prompt_version": ...}) - recorded with every proposal
+    planner_info: Callable[[], dict[str, str]] | None = None
 
 
 @dataclass

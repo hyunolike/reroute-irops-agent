@@ -16,6 +16,7 @@ import httpx
 
 from app.approval.gateway import ApprovalConflict, ApprovalRequired, ExecutionGrant
 from app.domain.models import OptimizationResult, PolicyHit
+from app.resolution.models import ResolutionAttempt
 from app.security.governed_http import PolicyViolation
 from app.security.policy import OpenShellPolicy
 
@@ -100,6 +101,7 @@ class RemoteApprovalGateway:
         policy_hits: list[PolicyHit],
         explanation: str,
         requested_by: str,
+        exception_resolutions: list[ResolutionAttempt] | None = None,
     ):
         body = {
             "task_id": task_id,
@@ -108,6 +110,7 @@ class RemoteApprovalGateway:
             "policy_hits": [h.model_dump() for h in policy_hits],
             "explanation": explanation,
             "requested_by": requested_by,
+            "exception_resolutions": [r.model_dump(mode="json") for r in exception_resolutions or []],
         }
         r = self.cp.request("POST", "/internal/agent/plans", json=body)
         r.raise_for_status()

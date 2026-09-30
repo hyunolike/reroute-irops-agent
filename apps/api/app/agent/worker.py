@@ -21,11 +21,7 @@ from app.domain.enums import Component
 from app.providers.llm.factory import build_llm
 from app.security.governed_http import GovernedHttpClient
 from app.security.policy import OpenShellPolicy
-from app.tools.airline import GetAffectedPassengers, GetDisruptedFlight, SearchAlternativeFlights
-from app.tools.base import ToolRegistry
-from app.tools.knowledge import SearchRebookingPolicy
-from app.tools.optimization import OptimizeRebooking
-from app.tools.rebooking import ExecuteRebooking, ProposeRebooking
+from app.tools.catalog import build_tool_registry
 
 log = logging.getLogger("reroute.worker")
 
@@ -55,17 +51,7 @@ class AgentWorker:
         )
         llm, reason = build_llm(settings, http)
         log.info("reasoning model: %s", reason)
-        tools = ToolRegistry(
-            [
-                GetDisruptedFlight(),
-                GetAffectedPassengers(),
-                SearchAlternativeFlights(),
-                SearchRebookingPolicy(),
-                OptimizeRebooking(),
-                ProposeRebooking(),
-                ExecuteRebooking(),
-            ]
-        )
+        tools = build_tool_registry(settings.exception_resolution_mode)
         # Tool badges reflect the providers the control plane ACTUALLY runs (retriever / solver)
         overrides = {k: Component(v) for k, v in self._control_plane_runtime()["component_overrides"].items()}
         self.orchestrator = AgentOrchestrator(
@@ -79,6 +65,7 @@ class AgentWorker:
             component_overrides=overrides,
             step_delay_ms=settings.agent_step_delay_ms,
             max_steps=settings.agent_max_steps,
+            resolution_mode=settings.exception_resolution_mode,
         )
 
     def _control_plane_runtime(self, max_delay: float = 30.0) -> dict:

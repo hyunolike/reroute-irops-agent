@@ -6,7 +6,7 @@ AWS_REGION ?= ap-northeast-2
 TAG ?= latest
 TF := infra/terraform
 
-.PHONY: mcp-smoke eval-llm help up up-gpu up-worker down logs reset smoke test lint fmt dev-api dev-web install export-cuopt push deploy redeploy tf-validate sandbox probes
+.PHONY: mcp-smoke eval-llm eval-exceptions help up up-gpu up-worker down logs reset smoke test lint fmt dev-api dev-web install export-cuopt push deploy redeploy tf-validate sandbox probes
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[32m%-14s\033[0m %s\n", $$1, $$2}'
@@ -55,6 +55,9 @@ dev-web: ## Run web locally (proxies /api to :8000)
 
 eval-llm: ## Score the agent on 4 scenarios with the configured LLM (NVIDIA_API_KEY from the shell or root .env)
 	cd $(API) && .venv/bin/python -m app.agent.evaluate
+
+eval-exceptions: ## Score exception recommendations on the golden set and apply the release gates (REPEATS=3 for consistency)
+	cd $(API) && .venv/bin/python -m app.evals.exceptions --repeats $(or $(REPEATS),1)
 
 mcp-smoke: ## Exercise an MCP endpoint like an external agent: REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://host/mcp
 	cd $(API) && .venv/bin/python -m app.integrations.mcp_smoke $(or $(MCP_URL),http://localhost:8000/mcp)

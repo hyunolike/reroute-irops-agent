@@ -1,4 +1,4 @@
-import type { AgentEvent, AuditEntry, Flight, Plan, ProbeResult, Runtime, SecurityPolicy, Task, AgentChoice } from "./types";
+import type { AgentEvent, AuditEntry, DecisionKind, ExceptionResolutions, Flight, Plan, ProbeResult, Runtime, SecurityPolicy, Task, AgentChoice } from "./types";
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 export const DEFAULT_OPERATOR = "ops.controller.kim";
@@ -13,7 +13,13 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     let msg = `${r.status}`;
     try {
       const b = await r.json();
-      msg = typeof b.detail === "string" ? b.detail : JSON.stringify(b.detail ?? b);
+      const d = b.detail;
+      if (typeof d === "string") msg = d;
+      else if (d?.message) {
+        // structured refusals, e.g. exception decisions that failed re-verification: message + per-passenger reasons
+        const why = Object.entries((d.violations ?? {}) as Record<string, string[]>).map(([pid, v]) => `${pid}: ${v.join("; ")}`);
+        msg = [d.message, ...why].join(" · ");
+      } else msg = JSON.stringify(d ?? b);
     } catch {}
     throw new Error(msg);
   }
@@ -29,12 +35,17 @@ export const api = {
   events: (id: string, after = 0) => req<{ events: AgentEvent[] }>(`/api/agent/tasks/${id}/events?stream=false&after=${after}`),
   plan: (id: string) => req<Plan>(`/api/rebooking/plans/${id}`),
   flight: (no: string) => req<Flight>(`/api/flights/${no}`),
-  approve: (id: string, operator: string, comment: string, manualIds: string[]) =>
+  approve: (id: string, operator: string, comment: string, manualIds: string[], decisions: Record<string, DecisionKind> = {}) =>
     req<Plan>(`/api/rebooking/plans/${id}/approve`, {
       method: "POST",
       headers: { "X-Operator-Id": operator },
-      body: JSON.stringify({ comment, approved_manual_item_ids: manualIds }),
+      body: JSON.stringify({
+        comment,
+        approved_manual_item_ids: manualIds,
+        exception_decisions: Object.entries(decisions).map(([passenger_id, decision]) => ({ passenger_id, decision })),
+      }),
     }),
+  exceptionResolutions: (id: string) => req<ExceptionResolutions>(`/api/rebooking/plans/${id}/exception-resolutions`),
   reject: (id: string, operator: string, comment: string) =>
     req<Plan>(`/api/rebooking/plans/${id}/reject`, {
       method: "POST",

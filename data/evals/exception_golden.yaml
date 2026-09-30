@@ -1,0 +1,122 @@
+# Golden set for exception resolution: what an experienced duty controller would accept for each passenger the
+# solver cannot auto-assign. Every case is the seeded KE123 day plus declarative edits (app/evals/mutations.py).
+#
+#   acceptable: actions a controller would sign off        preferred: the action they would pick first (optional)
+#   flights:    for REASSIGN / WAIVER, the flights that count as correct (optional)
+#
+# Labels are reviewed data, not generated: change them only with an operations reason in `why`.
+# The runner checks each label against the solver and the verifier before scoring anything (golden-set drift).
+version: 1
+
+# Policies a recommendation may cite beyond those in the passenger's exception analysis (refund / duty of care).
+context_policies: [IROP-004]
+
+cases:
+  - id: ke123-baseline
+    description: The demo day as seeded.
+    command: KE123편이 결항됐어. 영향 승객을 확인하고 최적 재배정안을 만들어줘.
+    mutations: []
+    exceptions:
+      P010:
+        acceptable: [REQUEST_POLICY_WAIVER, OFFER_REFUND, REROUTE_OFFLINE]
+        preferred: REQUEST_POLICY_WAIVER
+        flights: [7C1102]
+        why: Only 7C1102 still makes SQ637, and only the missing interline agreement blocks it.
+      P011:
+        acceptable: [CONFIRM_SOLVER_ASSIGNMENT, REQUEST_POLICY_WAIVER]
+        preferred: CONFIRM_SOLVER_ASSIGNMENT
+        flights: [7C1102]
+        why: KE701 makes UA902 with 10 min over MCT; a 7C1102 waiver (40 min) is a defensible extra margin.
+      P013:
+        acceptable: [CONFIRM_SOLVER_ASSIGNMENT]
+        why: WCHC stays on own metal; KE703 is the only own-carrier seat. Moving airports buys nothing.
+      P014:
+        acceptable: [CONFIRM_SOLVER_ASSIGNMENT]
+        why: UMNR - never change the arrival airport of an unaccompanied minor; confirm the KE703 hand-over.
+
+  - id: waiver-target-sold-out
+    description: 7C1102 sells out, so no flight can save P010's SQ637 connection any more.
+    command: KE123편이 결항됐어. 영향 승객을 확인하고 최적 재배정안을 만들어줘.
+    mutations:
+      - sell_out: {flight_no: 7C1102}
+    exceptions:
+      P010:
+        acceptable: [OFFER_REFUND, REROUTE_OFFLINE]
+        why: Nothing is feasible or waivable; a waiver onto a full flight is not an option.
+      P011:
+        acceptable: [CONFIRM_SOLVER_ASSIGNMENT]
+        why: The 7C1102 alternative is gone; keep the KE701 seat.
+      P013:
+        acceptable: [CONFIRM_SOLVER_ASSIGNMENT]
+        why: As in the baseline.
+      P014:
+        acceptable: [CONFIRM_SOLVER_ASSIGNMENT]
+        why: As in the baseline.
+
+  - id: connection-passenger-needs-wheelchair
+    description: P010 (SQ637 connection) needs a wheelchair (WCHC), so partner flights are off limits.
+    command: Flight KE123 got cancelled. Rebook the affected passengers optimally and prepare it for my approval.
+    mutations:
+      - special_assistance: {passenger_id: P010, code: WCHC}
+    exceptions:
+      P010:
+        acceptable: [OFFER_REFUND, REROUTE_OFFLINE]
+        why: 7C1102 would save the connection, but SSR-001 keeps WCHC on own metal - a safety rule, never waived.
+      P011:
+        acceptable: [CONFIRM_SOLVER_ASSIGNMENT, REQUEST_POLICY_WAIVER]
+        preferred: CONFIRM_SOLVER_ASSIGNMENT
+        flights: [7C1102]
+        why: As in the baseline.
+      P013:
+        acceptable: [CONFIRM_SOLVER_ASSIGNMENT]
+        why: As in the baseline.
+      P014:
+        acceptable: [CONFIRM_SOLVER_ASSIGNMENT]
+        why: As in the baseline.
+
+  - id: connection-relaxed
+    description: P010's onward flight leaves two hours later, so the solver protects it and it is no exception.
+    command: KE123편이 결항됐어. 영향 승객을 확인하고 최적 재배정안을 만들어줘.
+    mutations:
+      - shift_onward: {passenger_id: P010, minutes: 120}
+    exceptions:
+      P011:
+        acceptable: [CONFIRM_SOLVER_ASSIGNMENT, REQUEST_POLICY_WAIVER]
+        preferred: CONFIRM_SOLVER_ASSIGNMENT
+        flights: [7C1102]
+        why: As in the baseline.
+      P013:
+        acceptable: [CONFIRM_SOLVER_ASSIGNMENT]
+        why: As in the baseline.
+      P014:
+        acceptable: [CONFIRM_SOLVER_ASSIGNMENT]
+        why: As in the baseline.
+
+  - id: partner-flight-cancelled
+    description: OZ102 is cancelled too; a business passenger (P004) is left without a seat.
+    command: KE123편이 결항됐어. 영향 승객을 확인하고 최적 재배정안을 만들어줘.
+    mutations:
+      - flight_status: {flight_no: OZ102, status: CANCELLED}
+    exceptions:
+      P004:
+        acceptable: [REQUEST_POLICY_WAIVER, OFFER_REFUND, REROUTE_OFFLINE]
+        preferred: REQUEST_POLICY_WAIVER
+        flights: [KE2101]
+        why: KE2101 to HND is blocked only by the co-terminal policy, keeps business class and arrives earliest.
+          7C1102 has no business cabin (a forced downgrade) and KE705 is a day later.
+      P010:
+        acceptable: [REQUEST_POLICY_WAIVER, OFFER_REFUND, REROUTE_OFFLINE]
+        preferred: REQUEST_POLICY_WAIVER
+        flights: [7C1102]
+        why: As in the baseline.
+      P011:
+        acceptable: [CONFIRM_SOLVER_ASSIGNMENT, REQUEST_POLICY_WAIVER]
+        preferred: CONFIRM_SOLVER_ASSIGNMENT
+        flights: [7C1102]
+        why: As in the baseline.
+      P013:
+        acceptable: [CONFIRM_SOLVER_ASSIGNMENT]
+        why: As in the baseline.
+      P014:
+        acceptable: [CONFIRM_SOLVER_ASSIGNMENT]
+        why: As in the baseline.

@@ -26,7 +26,8 @@ from app.container import Container
 INSTRUCTIONS = """ReRoute - airline disruption (IROPS) recovery tools.
 Workflow: open_recovery_task(instruction) -> get_disrupted_flight -> get_affected_passengers ->
 search_alternative_flights -> search_rebooking_policy (until coverage.missing is empty) -> optimize_rebooking ->
-explore_exception_options for each exception passenger -> propose_rebooking.
+explore_exception_options for each exception passenger -> propose_exception_resolution for each of them (when
+available) -> propose_rebooking.
 If the flight needs no re-accommodation, call finish_without_action with the policy id you relied on.
 Use log_reasoning to show the operator why you take each step. Airline rules must come from
 search_rebooking_policy, never from memory. The allocation is computed by the solver and cannot be changed.
@@ -138,6 +139,30 @@ def build_mcp_server(c: Container) -> MCPServer:
     async def explore_exception_options(task_id: str, passenger_id: str, ctx: Context) -> dict[str, Any]:
         """For a MANUAL_REVIEW / NO_FEASIBLE passenger: every option with the exact blocking constraint and policy id."""
         return await call(ctx, task_id, "explore_exception_options", {"passenger_id": passenger_id})
+
+    if c.tools.get("propose_exception_resolution") is not None:
+
+        @server.tool()
+        async def propose_exception_resolution(
+            task_id: str,
+            passenger_id: str,
+            action: str,
+            ctx: Context,
+            rationale: str,
+            flight_no: str | None = None,
+            cabin: str | None = None,
+            policy_ids: list[str] | None = None,
+            checklist: list[str] | None = None,
+        ) -> dict[str, Any]:
+            """After explore_exception_options: recommend ONE action for that passenger, from its options.
+            action: CONFIRM_SOLVER_ASSIGNMENT (MANUAL_REVIEW, give a checklist) | REASSIGN_TO_OPTION (an option with
+            feasible_under_policy) | REQUEST_POLICY_WAIVER (an option with waivable_by_duty_manager; cite the waived
+            policy ids) | OFFER_REFUND | REROUTE_OFFLINE. A deterministic verifier answers PASS, PASS_REQUIRES_WAIVER
+            or REJECTED with violations (correct it once). Advisory: a human operator decides; nothing is booked."""
+            args = {"passenger_id": passenger_id, "action": action, "rationale": rationale}
+            args |= {k: v for k, v in (("flight_no", flight_no), ("cabin", cabin)) if v}
+            args |= {k: v for k, v in (("policy_ids", policy_ids), ("checklist", checklist)) if v}
+            return await call(ctx, task_id, "propose_exception_resolution", args)
 
     @server.tool()
     async def propose_rebooking(task_id: str, flight_no: str, ctx: Context) -> dict[str, Any]:

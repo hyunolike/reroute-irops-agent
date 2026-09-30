@@ -5,7 +5,7 @@ import { Ban, CheckCircle2, Clock, Gavel, Loader2, ShieldX, XCircle } from "luci
 import { Panel, Pill } from "./ui";
 import { api, DEFAULT_OPERATOR } from "@/lib/api";
 import { clock, cx } from "@/lib/format";
-import type { Plan } from "@/lib/types";
+import type { DecisionKind, Plan } from "@/lib/types";
 
 function useCountdown(iso?: string) {
   const [now, setNow] = useState(() => Date.now());
@@ -20,7 +20,19 @@ function useCountdown(iso?: string) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-export function ApprovalPanel({ plan, selectedManual, onDecided }: { plan: Plan; selectedManual: string[]; onDecided: (p: Plan) => void }) {
+export function ApprovalPanel({
+  plan,
+  selectedManual,
+  decisions = {},
+  waiverSelected = false,
+  onDecided,
+}: {
+  plan: Plan;
+  selectedManual: string[];
+  decisions?: Record<string, DecisionKind>;
+  waiverSelected?: boolean;
+  onDecided: (p: Plan) => void;
+}) {
   const [operator, setOperator] = useState(DEFAULT_OPERATOR);
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState<"approve" | "reject" | "probe" | null>(null);
@@ -30,12 +42,16 @@ export function ApprovalPanel({ plan, selectedManual, onDecided }: { plan: Plan;
   const countdown = useCountdown(a?.status === "PENDING" ? a.expires_at : undefined);
   const pending = a?.status === "PENDING";
   const autoCount = plan.items.filter((i) => i.status === "AUTO_ASSIGNED").length;
+  // checked manual-review rows plus accepted exception recommendations; an explicit decision wins over the checkbox
+  const reviewedCount = plan.items.filter((i) =>
+    decisions[i.passenger_id] ? decisions[i.passenger_id] === "ACCEPT" : selectedManual.includes(i.id),
+  ).length;
 
   const act = async (kind: "approve" | "reject") => {
     setBusy(kind);
     setError(null);
     try {
-      const p = kind === "approve" ? await api.approve(plan.id, operator, comment, selectedManual) : await api.reject(plan.id, operator, comment || "rejected by operator");
+      const p = kind === "approve" ? await api.approve(plan.id, operator, comment, selectedManual, decisions) : await api.reject(plan.id, operator, comment || "rejected by operator");
       onDecided(p);
     } catch (e) {
       setError(String(e));
@@ -68,7 +84,7 @@ export function ApprovalPanel({ plan, selectedManual, onDecided }: { plan: Plan;
               <div className="text-ops-muted">auto rebook</div>
             </div>
             <div className="rounded-lg bg-ops-panel2 p-2">
-              <div className="text-xl font-bold text-amber-300">+{selectedManual.length}</div>
+              <div className="text-xl font-bold text-amber-300">+{reviewedCount}</div>
               <div className="text-ops-muted">reviewed items</div>
             </div>
             <div className="rounded-lg bg-ops-panel2 p-2">
@@ -114,6 +130,16 @@ export function ApprovalPanel({ plan, selectedManual, onDecided }: { plan: Plan;
               <Ban className="h-4 w-4" /> {probe} → blocked & audited
             </div>
           )}
+          {Object.keys(decisions).length > 0 && (
+            <div className="text-[11px] text-ops-muted">
+              예외 권고 결정 {Object.keys(decisions).length}건 포함 (수락 {Object.values(decisions).filter((d) => d === "ACCEPT").length}) — 승인 시 control plane이 최신 재고로 다시 검증합니다.
+            </div>
+          )}
+          {waiverSelected && (
+            <div className="rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-[11px] text-violet-200">
+              정책 면제가 포함되어 있습니다. duty manager 권한이 있는 operator id로 승인해야 합니다 (데모: <span className="font-mono">dm.park</span>).
+            </div>
+          )}
           {error && <div className="text-xs text-rose-300">{error}</div>}
         </div>
       ) : (
@@ -124,6 +150,11 @@ export function ApprovalPanel({ plan, selectedManual, onDecided }: { plan: Plan;
           </div>
           {a.comment && <div className="text-xs text-ops-muted">“{a.comment}”</div>}
           {a.status === "APPROVED" && a.approved_manual_item_ids.length > 0 && <div className="text-xs text-amber-200">+ {a.approved_manual_item_ids.length} manual-review passengers included</div>}
+          {a.status === "APPROVED" && (a.exception_decisions ?? []).length > 0 && (
+            <div className="text-xs text-violet-200">
+              + exception decisions: {a.exception_decisions.map((d) => `${d.passenger_id} ${d.action ?? d.decision}`).join(", ")}
+            </div>
+          )}
         </div>
       )}
     </Panel>

@@ -50,6 +50,8 @@ export interface Runtime {
   tools: { name: string; mutating: boolean }[];
   /** OpenClaw bridge on the NemoClaw host (heartbeat within the last 30 s = connected) */
   openclaw?: { connected: boolean; last_seen: string | null; sandbox?: string | null; model?: string | null };
+  /** shadow: recommendations recorded for evaluation only · assist: shown here for the operator to decide */
+  exception_resolution?: { mode: "off" | "shadow" | "assist" };
 }
 
 export type AgentChoice = "reroute" | "openclaw";
@@ -148,6 +150,7 @@ export interface Plan {
     approved_by: string | null;
     comment: string | null;
     approved_manual_item_ids: string[];
+    exception_decisions: ExceptionDecisionRecord[];
     created_at: string;
     approved_at: string | null;
     expires_at: string;
@@ -201,4 +204,55 @@ export interface ProbeResult {
   policy: string;
   reason: string;
   enforced_by: string;
+}
+
+export type ResolutionAction = "CONFIRM_SOLVER_ASSIGNMENT" | "REASSIGN_TO_OPTION" | "REQUEST_POLICY_WAIVER" | "OFFER_REFUND" | "REROUTE_OFFLINE";
+export type ResolutionVerdict = "PASS" | "PASS_REQUIRES_WAIVER" | "REJECTED";
+export type DecisionKind = "ACCEPT" | "MODIFY" | "REJECT";
+
+export interface ExceptionProposal {
+  passenger_id: string;
+  action: ResolutionAction;
+  flight_no: string | null;
+  cabin: "BUSINESS" | "ECONOMY" | null;
+  policy_ids: string[];
+  checklist: string[];
+  rationale: string;
+  alternatives_considered: string[];
+}
+
+/** A planner recommendation for one exception passenger, re-verified by the control plane (assist mode). */
+export interface ExceptionRecommendation {
+  passenger_id: string;
+  item_id: string | null;
+  action: ResolutionAction;
+  proposal: ExceptionProposal;
+  verdict: ResolutionVerdict;
+  planner_verdict: ResolutionVerdict;
+  violations: string[];
+  required_role: string | null;
+  waived: string[];
+  seat: { flight_no: string; cabin: string } | null;
+  planner: string;
+  prompt_version: string;
+}
+
+export interface ExceptionDecisionRecord {
+  passenger_id: string;
+  item_id: string;
+  decision: DecisionKind;
+  source: "planner" | "operator";
+  decided_by: string;
+  action: ResolutionAction | null;
+  verdict: ResolutionVerdict | null;
+  required_role: string | null;
+  seat: { flight_no: string; cabin: string } | null;
+}
+
+export interface ExceptionResolutions {
+  plan_id: string;
+  mode: "off" | "shadow" | "assist";
+  metrics: Record<string, any>;
+  decisions: ExceptionDecisionRecord[];
+  recommendations?: ExceptionRecommendation[];
 }

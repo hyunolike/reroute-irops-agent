@@ -11,7 +11,7 @@ WORKDIR /app
 RUN pip install --no-cache-dir uv==0.5.11
 
 COPY apps/api/pyproject.toml ./pyproject.toml
-RUN uv venv /app/.venv && uv pip install --python /app/.venv/bin/python --no-cache -r pyproject.toml
+RUN uv venv /app/.venv && uv pip install --python /app/.venv/bin/python --no-cache -r pyproject.toml --extra otel
 
 COPY apps/api/app ./app
 COPY documents ./documents

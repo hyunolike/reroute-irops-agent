@@ -17,7 +17,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.agent.prompts import BRIEFING_PROMPT, SYSTEM_PROMPT
+from app.agent.prompts import BRIEFING_PROMPT, prompt_version, system_prompt
 from app.approval.gateway import ApprovalError, ApprovalGateway
 from app.domain.enums import AgentState, AssignmentStatus, Component, EventType
 from app.providers.llm.base import LLMError, LLMProvider, LLMResponse, ToolCall
@@ -46,6 +46,7 @@ class AgentOrchestrator:
         component_overrides: dict[str, Component] | None = None,
         step_delay_ms: int = 0,
         max_steps: int = 30,
+        resolution_mode: str = "shadow",
     ) -> None:
         self.repo = repo
         self.llm = llm
@@ -58,6 +59,9 @@ class AgentOrchestrator:
         self.component_overrides = component_overrides or {}
         self.step_delay_ms = step_delay_ms
         self.max_steps = max_steps
+        self.resolution_mode = resolution_mode
+        self.system_prompt = system_prompt(tools.get("propose_exception_resolution") is not None)
+        self.prompt_version = prompt_version(self.system_prompt)
         self._external: dict[str, ToolContext] = {}
         self._state: dict[str, str] = {}
 
@@ -92,30 +96,40 @@ class AgentOrchestrator:
         llm_ref: dict[str, LLMProvider] = {"llm": self.llm}
         ctx = ToolContext(task_id=task_id, agent=self.agent, memory=memory, http=self.http, gateway=self.gateway)
         ctx.write_briefing = lambda: self._write_briefing(task_id, memory, llm_ref)
+        ctx.planner_info = lambda: {
+            "planner": f"{llm_ref['llm'].name}/{llm_ref['llm'].model}",
+            "prompt_version": self.prompt_version,
+            "mode": self.resolution_mode,
+        }
         self._state[task_id] = ""
         self._set_state(task_id, AgentState.RECEIVED, f"Goal received: “{task.command}”")
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": task.command},
         ]
         schemas = self.tools.schemas()
         nudges = 0
         try:
-            for _ in range(self.max_steps):
+            for turn in range(self.max_steps):
                 resp = await self._plan(task_id, llm_ref, messages, schemas)
-                if resp.content:
+                # LLM telemetry rides on the event this turn produces anyway (no extra timeline rows):
+                # the PLANNER event when the model wrote text, otherwise its first TOOL_CALL
+                llm_info: dict[str, Any] | None = llm_telemetry(resp, llm_ref["llm"], "plan", turn)
+                if resp.content or not resp.tool_calls:
                     self._emit(
                         task_id,
                         EventType.PLANNER,
                         self._llm_component(llm_ref["llm"]),
-                        _one_line(resp.content),
+                        _one_line(resp.content or "(no text and no tool call)"),
                         {
                             "model": resp.model,
                             "latency_ms": round(resp.latency_ms, 1),
                             "reasoning": (resp.reasoning or "")[:2000],
+                            "llm": llm_info,
                         },
                         resp.latency_ms,
                     )
+                    llm_info = None
                 if not resp.tool_calls:
                     if memory.plan_id:
                         break
@@ -144,7 +158,8 @@ class AgentOrchestrator:
                     continue
                 messages.append(_assistant_message(resp))
                 for tc in resp.tool_calls:
-                    content = await self._execute(task_id, tc, ctx)
+                    content = await self._execute(task_id, tc, ctx, llm=llm_info)
+                    llm_info = None
                     messages.append({"role": "tool", "tool_call_id": tc.id, "content": content})
                 if memory.plan_id:
                     break
@@ -220,6 +235,8 @@ class AgentOrchestrator:
         ctx = ToolContext(task_id=task_id, agent=self.agent, memory=memory, http=self.http, gateway=self.gateway)
         llm_ref: dict[str, LLMProvider] = {"llm": self.llm}
         ctx.write_briefing = lambda: self._write_briefing(task_id, memory, llm_ref)
+        # the external agent brings its own prompt, so no prompt version is recorded for it
+        ctx.planner_info = lambda: {"planner": "external", "prompt_version": "", "mode": self.resolution_mode}
         self._external[task_id] = ctx
 
     def _external_ctx(self, task_id: str) -> ToolContext:
@@ -283,7 +300,7 @@ class AgentOrchestrator:
             llm_ref["llm"] = MockLLMProvider()
             return await llm_ref["llm"].chat(messages, schemas, task_id=task_id)
 
-    async def _execute(self, task_id: str, tc: ToolCall, ctx: ToolContext) -> str:
+    async def _execute(self, task_id: str, tc: ToolCall, ctx: ToolContext, llm: dict[str, Any] | None = None) -> str:
         tool = self.tools.get(tc.name)
         if tool is None:
             self._emit(task_id, EventType.GUARDRAIL, Component.ORCHESTRATOR, f"Rejected unknown tool '{tc.name}'")
@@ -312,7 +329,7 @@ class AgentOrchestrator:
             EventType.TOOL_CALL,
             component,
             f"{tc.name}({_fmt_args(args_view)})",
-            {"tool": tc.name, "args": args_view},
+            {"tool": tc.name, "args": args_view, **({"llm": llm} if llm else {})},
         )
         start = time.perf_counter()
         try:
@@ -412,7 +429,7 @@ class AgentOrchestrator:
                         EventType.PLANNER,
                         Component.NEMOTRON,
                         f"Operator briefing written by {resp.model} (citations verified: {', '.join(sorted(cited)) or 'none'})",
-                        {"latency_ms": round(resp.latency_ms, 1)},
+                        {"latency_ms": round(resp.latency_ms, 1), "llm": llm_telemetry(resp, llm, "briefing")},
                         resp.latency_ms,
                     )
             except Exception as e:  # noqa: BLE001
@@ -447,7 +464,11 @@ class AgentOrchestrator:
             EventType.APPROVAL,
             Component.APPROVAL_GATEWAY,
             f"Plan approved by {approval.approved_by}" + (f" - “{approval.comment}”" if approval.comment else ""),
-            {"approval_id": approval.id, "approved_manual_items": approval.approved_manual_item_ids},
+            {
+                "approval_id": approval.id,
+                "approved_manual_items": approval.approved_manual_item_ids,
+                "exception_decisions": len(getattr(approval, "exception_decisions", None) or []),
+            },
         )
         self._set_state(task_id, AgentState.EXECUTING, "Executing approved plan")
         ctx = ToolContext(
@@ -488,6 +509,10 @@ class AgentOrchestrator:
     def final_report(self, plan_id: str) -> dict[str, Any]:
         plan = self.gateway.get_plan(plan_id)
         items = plan.items
+        approval = self.gateway.get_approval(plan_id)
+        # a remote gateway returns namespaces instead of dicts
+        decisions = [d if isinstance(d, dict) else _as_dict(d) for d in (getattr(approval, "exception_decisions", None) or [])]
+        names = {i.passenger_id: i.passenger_name for i in items}
         by = lambda st: [i for i in items if i.status == st]  # noqa: E731
         rebooked = by(AssignmentStatus.EXECUTED.value)
         return {
@@ -511,11 +536,42 @@ class AgentOrchestrator:
                     if i.status in (AssignmentStatus.HELD_FOR_OPERATOR.value, AssignmentStatus.NO_FEASIBLE.value)
                 ],
                 f"Meal vouchers for {sum(1 for i in rebooked if (i.delay_minutes or 0) >= 180)} passengers delayed ≥ 3h [IROP-004]",
+                *[
+                    f"{_FOLLOW_UP[d['action']]}: {names.get(d['passenger_id'], d['passenger_id'])} "
+                    + " ".join(f"[{p}]" for p in d["proposal"]["policy_ids"])
+                    for d in decisions
+                    if d["action"] in _FOLLOW_UP
+                ],
             ],
+            "exception_decisions": {d["passenger_id"]: d["action"] or d["decision"] for d in decisions},
         }
 
 
 # ---------------------------------------------------------------------- utilities
+def llm_telemetry(resp: LLMResponse, llm: LLMProvider, operation: str, turn: int | None = None) -> dict[str, Any]:
+    """One LLM call, in OpenTelemetry GenAI terms (read back by app/observability/trace.py)."""
+    usage = resp.usage or {}
+    return {
+        "operation": operation,
+        "turn": turn,
+        "provider": llm.name,
+        "model": resp.model or llm.model,
+        "latency_ms": round(resp.latency_ms, 1),
+        "input_tokens": usage.get("prompt_tokens", usage.get("input_tokens")),
+        "output_tokens": usage.get("completion_tokens", usage.get("output_tokens")),
+        "tool_calls": [tc.name for tc in resp.tool_calls],
+    }
+
+
+_FOLLOW_UP = {"OFFER_REFUND": "Refund offer (operator-approved)", "REROUTE_OFFLINE": "Offline re-routing (operator-approved)"}
+
+
+def _as_dict(ns: Any) -> Any:
+    if isinstance(ns, list):
+        return [_as_dict(x) for x in ns]
+    return {k: _as_dict(v) for k, v in vars(ns).items()} if hasattr(ns, "__dict__") else ns
+
+
 def no_action_justified(memory: AgentMemory) -> bool:
     """The planner may stop without a plan only if the facts say no re-accommodation is needed."""
     f = memory.flight

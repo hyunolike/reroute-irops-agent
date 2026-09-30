@@ -27,6 +27,7 @@ import numpy as np
 from app.domain.enums import Cabin
 from app.domain.models import AffectedPassengerDTO, ExcludedFlight, FlightDTO, OptimizationRequest, Penalties
 from app.optimization.config import Weights
+from app.optimization.constraints import eligible_cabins, flight_blocks, minutes, passenger_blocks
 
 
 @dataclass(frozen=True)
@@ -85,67 +86,16 @@ class Formulation:
         return self.request.alternatives
 
 
-def _minutes(delta_seconds: float) -> int:
-    return int(round(delta_seconds / 60.0))
-
-
 def screen_flights(req: OptimizationRequest) -> tuple[list[int], list[ExcludedFlight]]:
     """Apply flight-level hard constraints (C5, C6). Returns eligible flight indices."""
-    rules = req.rules
-    orig = req.disrupted_flight
     eligible: list[int] = []
     excluded: list[ExcludedFlight] = []
     for i, f in enumerate(req.alternatives):
-        if f.flight_no == orig.flight_no or f.status == "CANCELLED":
-            excluded.append(ExcludedFlight(flight_no=f.flight_no, reason="flight not operating", constraint="C6"))
-            continue
-        if f.status != "SCHEDULED":
-            excluded.append(
-                ExcludedFlight(
-                    flight_no=f.flight_no,
-                    reason=f"flight is itself disrupted ({f.status})",
-                    constraint="C6",
-                    policy_id=rules.applied.get("max_delay"),
-                )
-            )
-            continue
-        if f.destination != orig.destination and not rules.allow_coterminal:
-            excluded.append(
-                ExcludedFlight(
-                    flight_no=f.flight_no,
-                    reason=f"destination {f.destination} != {orig.destination} (co-terminal not allowed)",
-                    constraint="C5",
-                    policy_id=rules.applied.get("coterminal"),
-                )
-            )
-            continue
-        if f.carrier != rules.own_carrier:
-            if not rules.allow_interline or f.carrier not in rules.interline_partners:
-                excluded.append(
-                    ExcludedFlight(
-                        flight_no=f.flight_no,
-                        reason=f"carrier {f.carrier} has no interline agreement",
-                        constraint="C6",
-                        policy_id=rules.applied.get("interline"),
-                    )
-                )
-                continue
-        if rules.max_delay_hours is not None:
-            dep_delay_h = (f.departure_time - orig.departure_time).total_seconds() / 3600
-            if dep_delay_h > rules.max_delay_hours:
-                excluded.append(
-                    ExcludedFlight(
-                        flight_no=f.flight_no,
-                        reason=f"departs {dep_delay_h:.1f}h after original (> {rules.max_delay_hours:g}h limit)",
-                        constraint="C6",
-                        policy_id=rules.applied.get("max_delay"),
-                    )
-                )
-                continue
-        if f.departure_time <= orig.departure_time:
-            excluded.append(ExcludedFlight(flight_no=f.flight_no, reason="departs before disruption", constraint="C6"))
-            continue
-        eligible.append(i)
+        blocks = flight_blocks(f, req)
+        if blocks:
+            excluded.append(blocks[0].to_excluded(f.flight_no))
+        else:
+            eligible.append(i)
     return eligible, excluded
 
 
@@ -160,23 +110,13 @@ def build_formulation(req: OptimizationRequest, weights: Weights) -> Formulation
         reasons: list[str] = []
         for f_idx in eligible:
             f = req.alternatives[f_idx]
-            # C6 (passenger level): SSR passengers restricted to own metal
-            if p.special_assistance in rules.own_carrier_only_ssr and f.carrier != rules.own_carrier:
-                reasons.append(f"{f.flight_no}: {p.special_assistance} must stay on own carrier")
+            # C4 (minimum connection time) and C6 (SSR passengers restricted to own metal)
+            blocked, margin = passenger_blocks(p, f, req)
+            if blocked:
+                reasons.append(f"{f.flight_no}: {blocked[0].reason}")
                 continue
-            # C4: minimum connection time
-            margin: int | None = None
-            if p.is_connection:
-                slack = _minutes((p.onward_departure_time - f.arrival_time).total_seconds())  # type: ignore[operator]
-                mct = rules.mct_minutes or 0
-                margin = slack - mct
-                if margin < 0:
-                    reasons.append(f"{f.flight_no}: {slack}min to {p.onward_flight_no} < MCT {mct}min")
-                    continue
-            delay = max(0, _minutes((f.arrival_time - orig.arrival_time).total_seconds()))
-            cabins = [Cabin.BUSINESS, Cabin.ECONOMY] if p.cabin == Cabin.BUSINESS else [Cabin.ECONOMY]
-            if p.cabin == Cabin.ECONOMY and rules.allow_upgrade:
-                cabins.append(Cabin.BUSINESS)
+            delay = max(0, minutes((f.arrival_time - orig.arrival_time).total_seconds()))
+            cabins = eligible_cabins(p, rules)
             for cabin in cabins:
                 if f.available(cabin) <= 0:
                     continue
@@ -201,16 +141,15 @@ def build_formulation(req: OptimizationRequest, weights: Weights) -> Formulation
                 reasons.append(f"{f.flight_no}: no seats in eligible cabin")
         form.infeasibility[p_idx] = reasons
         if p.is_connection:
-            blocked = []
+            # policy-excluded flights that would protect the connection if a duty manager waived the policy
             by_no = {f.flight_no: f for f in req.alternatives}
             for ex in form.excluded_flights:
-                f = by_no.get(ex.flight_no)
-                if f is None or f.destination != orig.destination:
-                    continue
-                slack = _minutes((p.onward_departure_time - f.arrival_time).total_seconds())  # type: ignore[operator]
-                if slack >= (rules.mct_minutes or 0) and f.available(p.cabin) > 0:
-                    blocked.append(f"{f.flight_no} ({ex.reason}; {ex.policy_id or ex.constraint})")
-            form.blocked_options[p_idx] = blocked
+                f = by_no[ex.flight_no]
+                fb = flight_blocks(f, req)
+                if all(b.waivable for b in fb) and not passenger_blocks(p, f, req)[0] and f.available(p.cabin) > 0:
+                    form.blocked_options.setdefault(p_idx, []).append(
+                        f"{f.flight_no} ({ex.reason}; {ex.policy_id or ex.constraint})"
+                    )
         u = weights.unassigned_weight * (weights.vip_unassigned_multiplier if p.vip else 1.0)
         form.unassigned_cost.append(u)
 

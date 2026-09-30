@@ -17,6 +17,7 @@ from app.audit.service import AuditService
 from app.config import Settings
 from app.db.base import Database
 from app.domain.enums import Component
+from app.observability.otel import build_exporter
 from app.optimization.config import OptimizationConfig
 from app.optimization.cuopt import CuOptOptimizationProvider
 from app.optimization.fallback import FallbackOptimizationProvider
@@ -27,16 +28,12 @@ from app.rag.documents import load_policy_chunks
 from app.rag.lexical import LexicalRetrieverProvider
 from app.rag.nvidia import NvidiaRetrieverProvider
 from app.repositories.agent import AgentRepository
+from app.resolution.review import ResolutionReviewer
 from app.security.governed_http import GovernedHttpClient
 from app.security.policy import OpenShellPolicy
 from app.services.knowledge import PolicyKnowledgeService
 from app.services.optimization import OptimizationService
-from app.tools.airline import GetAffectedPassengers, GetDisruptedFlight, SearchAlternativeFlights
-from app.tools.base import ToolRegistry
-from app.tools.exceptions import ExploreExceptionOptions
-from app.tools.knowledge import SearchRebookingPolicy
-from app.tools.optimization import OptimizeRebooking
-from app.tools.rebooking import ExecuteRebooking, ProposeRebooking
+from app.tools.catalog import build_tool_registry
 
 log = logging.getLogger("reroute")
 
@@ -120,18 +117,21 @@ class Container:
         self.llm: LLMProvider
         self.llm, self.llm_reason = build_llm(settings, self.http)
 
-        self.tools = ToolRegistry(
-            [
-                GetDisruptedFlight(),
-                GetAffectedPassengers(),
-                SearchAlternativeFlights(),
-                SearchRebookingPolicy(),
-                OptimizeRebooking(),
-                ExploreExceptionOptions(),
-                ProposeRebooking(),
-                ExecuteRebooking(),
-            ]
+        self.tools = build_tool_registry(settings.exception_resolution_mode)
+        # control-plane re-verification of exception recommendations (assist mode); the transport is looked up per
+        # call so tests (and the in-process demo) can route the airline API without the network
+        self.reviewer = ResolutionReviewer(
+            self.gateway,
+            settings.airline_api_base_url,
+            lambda: self.http.transport,
+            duty_managers=settings.duty_manager_ids,
+            mode=settings.exception_resolution_mode,
+            timeout=settings.nim_timeout_seconds,
         )
+        # optional OTLP export of every settled task's trace (control plane only: it owns the event log)
+        self.trace_exporter = build_exporter(settings.otel_exporter_otlp_endpoint, settings.otel_service_name, self._task_trace)
+        if self.trace_exporter:
+            self.repo.on_settled = self.trace_exporter.export_task
         self.orchestrator = AgentOrchestrator(
             repo=self.repo,
             llm=self.llm,
@@ -148,7 +148,13 @@ class Container:
             },
             step_delay_ms=settings.agent_step_delay_ms,
             max_steps=settings.agent_max_steps,
+            resolution_mode=settings.exception_resolution_mode,
         )
+
+    def _task_trace(self, task_id: str) -> dict[str, Any] | None:
+        from app.api.agent import task_trace  # the API layer owns the views the trace is built from
+
+        return task_trace(self, task_id)
 
     # OpenClaw bridge (NemoClaw host): last heartbeat, kept in the control-plane process
     openclaw_bridge: dict[str, Any] | None = None
@@ -197,6 +203,7 @@ class Container:
             "demo_mode": s.demo_mode,
             "app_role": s.app_role,
             "llm": {"provider": self.llm.name, "model": self.llm.model, "nvidia": self.llm.nvidia, "reason": self.llm_reason},
+            "exception_resolution": {"mode": s.exception_resolution_mode},
             "retriever": {
                 "provider": self.knowledge.primary.name,
                 "nvidia": self.knowledge.primary.nvidia,

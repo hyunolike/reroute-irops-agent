@@ -12,9 +12,11 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_container
+from app.api.rebooking import plan_view, resolution_view
 from app.container import Container
 from app.db.models import AgentEvent, AgentTask
 from app.domain.enums import TERMINAL_STATES, AgentState
+from app.observability.trace import build_trace
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
@@ -98,6 +100,26 @@ def get_task(task_id: str, c: Container = Depends(get_container)) -> dict:
     if t is None:
         raise HTTPException(404, "task not found")
     return task_view(t)
+
+
+def task_trace(c: Container, task_id: str) -> dict | None:
+    t = c.repo.get_task(task_id)
+    if t is None:
+        return None
+    attempts, approval = [], None
+    if t.plan_id:
+        attempts = [resolution_view(r) for r in c.gateway.get_exception_resolutions(t.plan_id)]
+        approval = plan_view(c.gateway.get_plan(t.plan_id), c.gateway.get_approval(t.plan_id))["approval"]
+    return build_trace(task_view(t), [event_view(e) for e in c.repo.events(task_id)], attempts, approval)
+
+
+@router.get("/tasks/{task_id}/trace")
+def get_trace(task_id: str, c: Container = Depends(get_container)) -> dict:
+    """The task as a trace (LLM calls, tool calls, one span per exception passenger) - OpenTelemetry GenAI names."""
+    trace = task_trace(c, task_id)
+    if trace is None:
+        raise HTTPException(404, "task not found")
+    return trace
 
 
 @router.get("/tasks/{task_id}/events")

@@ -1,0 +1,48 @@
+name: eval-nightly
+
+# The same gates as CI, but with the real reasoning model (Nemotron via NIM). A prompt or model change that
+# regresses here must not ship. Needs the NVIDIA_API_KEY repository secret; without it the job is skipped.
+on:
+  schedule:
+    - cron: "17 18 * * *" # 03:17 KST
+  workflow_dispatch:
+    inputs:
+      repeats:
+        description: runs per golden case (consistency needs >= 2)
+        default: "3"
+
+jobs:
+  nemotron:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    env:
+      NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+      LLM_PROVIDER: nvidia
+    steps:
+      - uses: actions/checkout@v4
+      - name: require the NVIDIA key
+        run: |
+          if [ -z "$NVIDIA_API_KEY" ]; then
+            echo "::notice::NVIDIA_API_KEY secret is not set - skipping the Nemotron evaluation"
+            echo "SKIP=1" >> "$GITHUB_ENV"
+          fi
+      - uses: astral-sh/setup-uv@v3
+        if: env.SKIP != '1'
+      - if: env.SKIP != '1'
+        run: uv venv -p 3.12 .venv && uv pip install --python .venv/bin/python -e '.[dev]'
+      - name: agent scenarios
+        if: env.SKIP != '1'
+        run: .venv/bin/python -m app.agent.evaluate --json > agent-eval.json
+      - name: exception resolution (golden set, release gates)
+        if: env.SKIP != '1' && !cancelled()
+        run: .venv/bin/python -m app.evals.exceptions --repeats ${{ inputs.repeats || '3' }} --json exception-eval.json
+      - uses: actions/upload-artifact@v4
+        if: always() && env.SKIP != '1'
+        with:
+          name: nightly-eval
+          path: |
+            apps/api/agent-eval.json
+            apps/api/exception-eval.json
+          if-no-files-found: ignore

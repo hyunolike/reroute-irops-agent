@@ -61,6 +61,16 @@ class Settings(BaseSettings):
     nim_max_retries: int = 4
     # Maximum planner turns per task (a real model may call tools one at a time)
     agent_max_steps: int = 30
+    # Exception passengers (MANUAL_REVIEW / NO_FEASIBLE): the planner recommends one verified action each.
+    # "shadow" records the recommendations for evaluation without showing them to operators; "assist" shows them in
+    # the approval console, where the operator accepts / modifies / rejects each one; "off" disables it.
+    exception_resolution_mode: Literal["off", "shadow", "assist"] = "shadow"
+    # Operator ids allowed to sign policy waivers (REQUEST_POLICY_WAIVER), comma-separated
+    duty_managers: str = "dm.park"
+
+    # --- Observability: export each settled task's trace over OTLP (needs the `otel` extra). Standard OTel env names.
+    otel_exporter_otlp_endpoint: str | None = Field(default=None, validation_alias="OTEL_EXPORTER_OTLP_ENDPOINT")
+    otel_service_name: str = Field(default="reroute", validation_alias="OTEL_SERVICE_NAME")
 
     # --- Retrieval: NeMo Retriever NIMs or local lexical index ---
     retriever_provider: Literal["nvidia", "lexical"] = "lexical"
@@ -99,6 +109,10 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     allow_demo_reset: bool = True
+
+    @property
+    def duty_manager_ids(self) -> set[str]:
+        return {x.strip() for x in self.duty_managers.split(",") if x.strip()}
 
     @property
     def docs_path(self) -> Path:

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.domain.enums import AgentState, AssignmentStatus, Cabin, Component
 from app.domain.models import OptimizationRequest
-from app.optimization.formulation import screen_flights
+from app.optimization.constraints import Block, flight_blocks, passenger_blocks
 from app.rag.compiler import compile_policy_rules
 from app.tools.base import Tool, ToolContext, ToolError, ToolResult
 
@@ -46,8 +46,6 @@ class ExploreExceptionOptions(Tool):
 
         rules = compile_policy_rules(list(m.policy_hits.values()))
         req = OptimizationRequest(disrupted_flight=m.flight, passengers=[pax], alternatives=m.alternatives, rules=rules)
-        _, excluded = screen_flights(req)
-        blocked_flight = {e.flight_no: e for e in excluded}
         loads = m.optimization.summary.flight_loads
         options = []
         for f in m.alternatives:
@@ -59,27 +57,11 @@ class ExploreExceptionOptions(Tool):
             if current.alternative_flight == f.flight_no and current.new_cabin is not None:
                 # the passenger's own seat in the plan is available to them
                 seats_left["business" if current.new_cabin == Cabin.BUSINESS else "economy"] += 1
-            blocked_by: list[str] = []
-            if f.flight_no in blocked_flight:
-                e = blocked_flight[f.flight_no]
-                blocked_by.append(f"{e.constraint} {e.policy_id or ''}: {e.reason}".replace("  ", " "))
-            if pax.special_assistance in rules.own_carrier_only_ssr and f.carrier != rules.own_carrier:
-                blocked_by.append(f"C6 {rules.applied.get('ssr', '')}: {pax.special_assistance} must stay on own carrier")
-            margin = None
-            if pax.onward_departure_time is not None and f.destination != m.flight.destination:
-                blocked_by.append(
-                    f"C4: arrives {f.destination} but onward {pax.onward_flight_no} departs {m.flight.destination} (airport change)"
-                )
-            elif pax.onward_departure_time is not None:
-                slack = int((pax.onward_departure_time - f.arrival_time).total_seconds() // 60)
-                margin = slack - (rules.mct_minutes or 0)
-                if margin < 0:
-                    blocked_by.append(
-                        f"C4 {rules.applied.get('mct', '')}: {slack} min to {pax.onward_flight_no} < MCT {rules.mct_minutes}"
-                    )
+            pax_blocks, margin = passenger_blocks(pax, f, req)
+            blocks = flight_blocks(f, req) + pax_blocks
             cabin_key = "business" if pax.cabin == Cabin.BUSINESS else "economy"
             if seats_left[cabin_key] <= 0 and not (pax.cabin == Cabin.BUSINESS and seats_left["economy"] > 0):
-                blocked_by.append("C2: no seat left after the plan")
+                blocks.append(Block("C2", "no seat left after the plan"))
             options.append(
                 {
                     "flight_no": f.flight_no,
@@ -90,8 +72,10 @@ class ExploreExceptionOptions(Tool):
                     "arrival_delay_min": int((f.arrival_time - m.flight.arrival_time).total_seconds() // 60),
                     "seats_left_after_plan": seats_left,
                     "connection_margin_min": margin,
-                    "blocked_by": blocked_by,
-                    "feasible_under_policy": not blocked_by,
+                    "blocked_by": [b.describe() for b in blocks],
+                    "feasible_under_policy": not blocks,
+                    # every block comes from a commercial policy a duty manager may waive (never MCT, SSR, seats)
+                    "waivable_by_duty_manager": bool(blocks) and all(b.waivable for b in blocks),
                 }
             )
         view = {
@@ -116,11 +100,7 @@ class ExploreExceptionOptions(Tool):
             "note": "Advisory only. The allocation is final solver output; recommend operator actions with policy ids.",
         }
         m.exception_analyses[pid] = view
-        only_blocked_by_policy = [
-            o["flight_no"]
-            for o in options
-            if o["blocked_by"] and all(b.startswith(("C5", "C6")) for b in o["blocked_by"])  # policy-only blocks
-        ]
+        only_blocked_by_policy = [o["flight_no"] for o in options if o["waivable_by_duty_manager"]]
         title = f"Exception analysis {pid} ({current.status.value}): {sum(o['feasible_under_policy'] for o in options)} feasible option(s)"
         if only_blocked_by_policy and current.status == AssignmentStatus.NO_FEASIBLE:
             title += f" · policy-blocked but operationally possible: {', '.join(only_blocked_by_policy)}"
