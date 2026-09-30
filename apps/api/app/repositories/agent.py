@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy import func, select
 
 from app.db.base import Database, utcnow
 from app.db.models import AgentEvent, AgentTask
+from app.domain.enums import TERMINAL_STATES
 
 
 class AgentRepository:
     def __init__(self, db: Database) -> None:
         self.db = db
+        # called once a task reaches a terminal state (e.g. to export its trace); set by the container
+        self.on_settled: Callable[[str], None] | None = None
 
     def create_task(self, command: str, runtime: dict[str, Any]) -> AgentTask:
         with self.db.session() as s:
@@ -33,12 +37,16 @@ class AgentRepository:
             task = s.get(AgentTask, task_id)
             if task is None:
                 raise LookupError(task_id)
+            previous = task.state
             for k, v in fields.items():
                 setattr(task, k, v)
+            settled = "state" in fields and task.state in TERMINAL_STATES and fields["state"] != previous
             task.updated_at = utcnow()
             s.commit()
             s.refresh(task)
-            return task
+        if settled and self.on_settled:
+            self.on_settled(task_id)
+        return task
 
     def add_event(
         self,

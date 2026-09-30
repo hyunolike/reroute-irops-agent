@@ -1,0 +1,10 @@
+# Release gates for exception resolution (python -m app.evals.exceptions). A prompt or model change that fails any
+# gate must not ship. CI runs the scripted planner on every push; the nightly workflow runs Nemotron.
+gates:
+  golden_set_drift: {max: 0}        # labels that no longer match the solver / verifier - fix the data first
+  verifier_bypass: {max: 0}         # a rejected proposal reaching the operator - must be impossible
+  coverage: {min: 1.0}              # every exception passenger gets a verified recommendation
+  first_pass_accept_rate: {min: 0.9}
+  action_accuracy: {min: 0.9}       # final action in the labelled acceptable set
+  citation_precision: {min: 0.95}   # cited policies are ones the passenger's analysis actually involves
+  consistency: {min: 0.8}           # same action (and flight) across repeated runs

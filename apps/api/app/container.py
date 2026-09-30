@@ -17,6 +17,7 @@ from app.audit.service import AuditService
 from app.config import Settings
 from app.db.base import Database
 from app.domain.enums import Component
+from app.observability.otel import build_exporter
 from app.optimization.config import OptimizationConfig
 from app.optimization.cuopt import CuOptOptimizationProvider
 from app.optimization.fallback import FallbackOptimizationProvider
@@ -127,6 +128,10 @@ class Container:
             mode=settings.exception_resolution_mode,
             timeout=settings.nim_timeout_seconds,
         )
+        # optional OTLP export of every settled task's trace (control plane only: it owns the event log)
+        self.trace_exporter = build_exporter(settings.otel_exporter_otlp_endpoint, settings.otel_service_name, self._task_trace)
+        if self.trace_exporter:
+            self.repo.on_settled = self.trace_exporter.export_task
         self.orchestrator = AgentOrchestrator(
             repo=self.repo,
             llm=self.llm,
@@ -145,6 +150,11 @@ class Container:
             max_steps=settings.agent_max_steps,
             resolution_mode=settings.exception_resolution_mode,
         )
+
+    def _task_trace(self, task_id: str) -> dict[str, Any] | None:
+        from app.api.agent import task_trace  # the API layer owns the views the trace is built from
+
+        return task_trace(self, task_id)
 
     # OpenClaw bridge (NemoClaw host): last heartbeat, kept in the control-plane process
     openclaw_bridge: dict[str, Any] | None = None

@@ -172,6 +172,10 @@ class MockLLMProvider(LLMProvider):
             )
         return LLMResponse(content="Plan submitted - waiting for operator approval.", model=self.model)
 
+    @staticmethod
+    def baseline(view: dict[str, Any]) -> dict[str, Any]:
+        return baseline_proposal(view).model_dump(mode="json", exclude_none=True)
+
     def _resolve_exceptions(self, called: dict[str, list[dict]], call) -> LLMResponse | None:
         """One rule-based proposal per explored passenger; a rejected one is corrected once to a refund."""
         views = [self._last_json([e]) for e in called.get("explore_exception_options", [])]
@@ -183,10 +187,7 @@ class MockLLMProvider(LLMProvider):
         if todo:
             return LLMResponse(
                 content=f"Recommending one grounded action for each of the {len(todo)} exception passengers.",
-                tool_calls=[
-                    call("propose_exception_resolution", **baseline_proposal(v).model_dump(mode="json", exclude_none=True))
-                    for v in todo
-                ],
+                tool_calls=[call("propose_exception_resolution", **self.baseline(v)) for v in todo],
                 model=self.model,
             )
         retry = [pid for pid, a in attempts.items() if len(a) == 1 and a[0].get("verdict") == "REJECTED"]

@@ -1,6 +1,6 @@
 # 예외 승객 처리: LLM 제안 + 결정적 검증기
 
-> 상태: **P1~P3 구현 완료** (검증기, 에이전트 루프 연동, shadow 기록, assist 모드 승인) · P4 설계 단계
+> 상태: **P1~P4 구현 완료** (검증기, 에이전트 루프 연동, shadow 기록, assist 모드 승인, LLMOps)
 
 ## 배경
 
@@ -111,7 +111,7 @@ LLM 호출과 I/O가 없는 순수 함수입니다. `verify_proposals(proposals,
 | P1 | 공용 제약 함수, 검증기, 테스트 (LLM 동작 변화 없음) | ✅ 완료 |
 | P2 | `propose_exception_resolution` 툴, mock 규칙 기반 proposer(데모 + eval baseline), `ExceptionResolution` 저장. **shadow 모드**: 기록만 하고 UI에는 표시하지 않음 | ✅ 완료 |
 | P3 | **assist 모드**: 승인 API에 `exception_decisions`(ACCEPT/MODIFY/REJECT) 추가, control plane 재검증, duty manager 확인, waiver 감사 기록, 승인 화면 카드, MCP 노출 | ✅ 완료 |
-| P4 | LLMOps: 예외 단위 트레이싱, 골든셋, CI(mock)·nightly(Nemotron) eval 게이트 | 예정 |
+| P4 | LLMOps: 예외 단위 트레이싱과 OTLP export, 골든셋, CI(mock)·nightly(Nemotron) eval 게이트 | ✅ 완료 |
 
 자동 실행은 단계 계획에 없습니다. 상태를 바꾸는 작업은 계속 사람이 승인합니다.
 
@@ -167,16 +167,47 @@ KE123을 대시보드에서 끝까지 실행했을 때: 4건 모두 수락한 �
 
 ## LLMOps (P4)
 
-- **트레이싱**: 예외 1건 = 트레이스 1개 (explore → propose → verify → 재시도 → 운영자 결정). 속성은 `prompt_version`, `model`, 토큰(`nim.py`가 이미 받는 `usage`), 지연시간, verdict, violations입니다.
-- **골든셋**: seed를 변형해서 SSR, 빠듯한 환승, 매진, interline 차단, 좌석 경쟁 케이스 20~50개를 만듭니다. 정답은 대부분 코드로 계산할 수 있습니다(제약을 완화해 solver를 다시 돌리면 "waiver로 환승을 살릴 수 있나"가 판정됨). LLM-as-judge는 rationale 문장 품질에만 씁니다.
+### 트레이싱 — `app/observability/`
 
-| 지표 | 게이트 예시 |
+| 항목 | 내용 |
 |---|---|
-| 1차 검증 통과율 | ≥ 90% |
-| 검증 실패 제안이 권고로 노출된 건수 | **0** (구조적 보장 + 테스트) |
-| 액션 정확도 | ≥ mock proposer baseline |
-| 인용 정밀도 | ≥ 95% |
-| 5회 반복 액션 일치율 | ≥ 80% |
+| LLM 호출 기록 | 플래너 턴마다 모델, 입력·출력 토큰, 지연시간을 기록합니다. 텍스트가 있는 턴은 PLANNER 이벤트에, 툴만 호출한 턴은 첫 TOOL_CALL 이벤트에 붙여서 **타임라인에 행이 늘지 않습니다** |
+| 트레이스 | `GET /api/agent/tasks/{id}/trace`. 이미 저장된 이벤트·권고 기록·승인에서 사후에 만들기 때문에 in-process, sandbox worker, 외부 MCP 플래너 모두 똑같이 동작합니다 |
+| 구조 | `recovery_task` 아래에 LLM 호출, 툴 호출, 예외 승객마다 `exception P010` 스팬. 예외 스팬 안에 분석 → 제안(검증 판정 포함) → 운영자 결정이 들어갑니다 |
+| 속성 이름 | OpenTelemetry GenAI 규약(`gen_ai.request.model`, `gen_ai.usage.input_tokens`, `gen_ai.tool.name`)과 `reroute.*` |
+| OTLP export | `OTEL_EXPORTER_OTLP_ENDPOINT`를 설정하면 작업이 끝날 때(COMPLETED/REJECTED/FAILED) 운영자 결정까지 포함한 트레이스를 한 번 보냅니다. Langfuse, Arize Phoenix, Jaeger, Grafana Tempo 등 OTLP를 받는 곳이면 됩니다. export가 실패해도 작업에는 영향이 없습니다 |
 
-- **온라인 지표**: 액션 유형별·프롬프트 버전별 운영자 수락/수정/거절률, 검증 거절률, 재시도율, 결정까지 걸린 시간. 운영자가 수정한 케이스는 골든셋 후보로 올립니다.
-- **CI**: PR마다 검증기 테스트와 mock LLM 파이프라인을 돌리고, nightly로 실제 Nemotron eval을 돌립니다. 프롬프트를 바꾼 PR은 nightly 결과를 첨부합니다.
+### 골든셋과 평가 — `data/evals/exception_golden.yaml`, `app/evals/exceptions.py`
+
+- **케이스**: seed 위에 선언적 변경(매진, SSR 추가, 환승 시간 이동, 편 결항, 좌석 증감)을 얹은 5개 케이스, 예외 승객 20명. 승객마다 `acceptable`(관제사가 승인할 액션), `preferred`(먼저 고를 액션), `flights`(맞는 편), `why`(근거)를 사람이 라벨링했습니다.
+- **drift 검사**: 채점 전에 라벨이 현재 solver·검증기와 맞는지 확인합니다. 예외 승객 집합이 달라졌거나, 라벨의 편이 더 이상 가능하지도 면제 가능하지도 않으면 채점하지 않고 **drift로 실패**합니다. 데이터가 바뀌었는데 라벨이 조용히 모델을 벌하거나 봐주는 일을 막습니다.
+- **실행**: `make eval-exceptions` (`REPEATS=3`이면 일관성까지). assist 모드로 끝까지 실행하고, control plane 재검증 결과도 같이 확인합니다.
+
+| 게이트 (`config/eval_gates.yaml`) | 기준 | 의미 |
+|---|---|---|
+| `golden_set_drift` | 0 | 라벨이 현재 데이터와 맞음 |
+| `verifier_bypass` | 0 | 거부된 제안이 운영자에게 권고로 보인 적 없음 |
+| `coverage` | 1.0 | 예외 승객 전원 권고 |
+| `first_pass_accept_rate` | ≥ 0.9 | 재시도 없이 검증 통과 |
+| `action_accuracy` | ≥ 0.9 | 최종 액션(과 편)이 라벨 안에 있음 |
+| `citation_precision` | ≥ 0.95 | 인용한 정책이 그 승객의 분석에 실제로 등장 |
+| `consistency` | ≥ 0.8 | 반복 실행해도 같은 액션·편 |
+
+함께 보고되는 값은 게이트가 아닙니다: 규칙 기반 baseline의 정확도, preferred 일치율, 케이스당 LLM 호출·토큰·지연.
+
+규칙 기반 baseline은 현재 골든셋에서 정확도 1.0이라서 "baseline 이상"은 게이트로 쓰지 않았습니다. 이 값은 비교용으로만 보고합니다. 골든셋에 규칙으로 풀리지 않는 케이스가 늘어나면 그때 게이트로 올리는 게 맞습니다.
+
+**게이트가 실제로 잡는지** 테스트로 고정했습니다(`tests/test_evals.py`). 전원 환불하는 플래너는 모든 제안이 검증을 통과해도 정확도 0.25로 실패하고, 편을 지어내는 플래너는 1차 통과율 0으로 실패합니다. 매번 다른 답을 내는 플래너는 일관성 0.75로, 낡은 라벨은 drift로 실패합니다.
+
+### CI
+
+| 언제 | 무엇 |
+|---|---|
+| 모든 push/PR (`ci.yml`) | pytest(게이트 테스트 포함) + scripted 플래너로 골든셋 평가, 리포트 artifact |
+| 매일 03:17 KST (`eval-nightly.yml`) | Nemotron으로 에이전트 시나리오와 골든셋(3회 반복) 평가, 리포트 artifact. `NVIDIA_API_KEY` secret이 없으면 건너뜀 |
+
+### 아직 남은 것
+
+- **온라인 지표 대시보드**: 운영자 수락/수정/거절률은 API 지표(`operator_decisions`)와 트레이스에 있지만, 프롬프트 버전별로 모아 보는 화면은 없습니다. OTLP 백엔드의 대시보드를 쓰는 편이 낫습니다.
+- **운영자 수정 → 골든셋**: MODIFY 결정을 골든셋 후보로 뽑아내는 도구는 아직 없습니다. 라벨은 사람이 검토해야 하므로 자동 추가는 하지 않는 게 맞습니다.
+- **골든셋 규모**: 지금은 5케이스·20명입니다. 좌석 경쟁(여러 예외 승객이 같은 면제 좌석을 두고 경쟁)과 비즈니스 다운그레이드 판단 케이스를 우선 늘리는 게 좋습니다.

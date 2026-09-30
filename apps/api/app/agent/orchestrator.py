@@ -110,21 +110,26 @@ class AgentOrchestrator:
         schemas = self.tools.schemas()
         nudges = 0
         try:
-            for _ in range(self.max_steps):
+            for turn in range(self.max_steps):
                 resp = await self._plan(task_id, llm_ref, messages, schemas)
-                if resp.content:
+                # LLM telemetry rides on the event this turn produces anyway (no extra timeline rows):
+                # the PLANNER event when the model wrote text, otherwise its first TOOL_CALL
+                llm_info: dict[str, Any] | None = llm_telemetry(resp, llm_ref["llm"], "plan", turn)
+                if resp.content or not resp.tool_calls:
                     self._emit(
                         task_id,
                         EventType.PLANNER,
                         self._llm_component(llm_ref["llm"]),
-                        _one_line(resp.content),
+                        _one_line(resp.content or "(no text and no tool call)"),
                         {
                             "model": resp.model,
                             "latency_ms": round(resp.latency_ms, 1),
                             "reasoning": (resp.reasoning or "")[:2000],
+                            "llm": llm_info,
                         },
                         resp.latency_ms,
                     )
+                    llm_info = None
                 if not resp.tool_calls:
                     if memory.plan_id:
                         break
@@ -153,7 +158,8 @@ class AgentOrchestrator:
                     continue
                 messages.append(_assistant_message(resp))
                 for tc in resp.tool_calls:
-                    content = await self._execute(task_id, tc, ctx)
+                    content = await self._execute(task_id, tc, ctx, llm=llm_info)
+                    llm_info = None
                     messages.append({"role": "tool", "tool_call_id": tc.id, "content": content})
                 if memory.plan_id:
                     break
@@ -294,7 +300,7 @@ class AgentOrchestrator:
             llm_ref["llm"] = MockLLMProvider()
             return await llm_ref["llm"].chat(messages, schemas, task_id=task_id)
 
-    async def _execute(self, task_id: str, tc: ToolCall, ctx: ToolContext) -> str:
+    async def _execute(self, task_id: str, tc: ToolCall, ctx: ToolContext, llm: dict[str, Any] | None = None) -> str:
         tool = self.tools.get(tc.name)
         if tool is None:
             self._emit(task_id, EventType.GUARDRAIL, Component.ORCHESTRATOR, f"Rejected unknown tool '{tc.name}'")
@@ -323,7 +329,7 @@ class AgentOrchestrator:
             EventType.TOOL_CALL,
             component,
             f"{tc.name}({_fmt_args(args_view)})",
-            {"tool": tc.name, "args": args_view},
+            {"tool": tc.name, "args": args_view, **({"llm": llm} if llm else {})},
         )
         start = time.perf_counter()
         try:
@@ -423,7 +429,7 @@ class AgentOrchestrator:
                         EventType.PLANNER,
                         Component.NEMOTRON,
                         f"Operator briefing written by {resp.model} (citations verified: {', '.join(sorted(cited)) or 'none'})",
-                        {"latency_ms": round(resp.latency_ms, 1)},
+                        {"latency_ms": round(resp.latency_ms, 1), "llm": llm_telemetry(resp, llm, "briefing")},
                         resp.latency_ms,
                     )
             except Exception as e:  # noqa: BLE001
@@ -542,6 +548,21 @@ class AgentOrchestrator:
 
 
 # ---------------------------------------------------------------------- utilities
+def llm_telemetry(resp: LLMResponse, llm: LLMProvider, operation: str, turn: int | None = None) -> dict[str, Any]:
+    """One LLM call, in OpenTelemetry GenAI terms (read back by app/observability/trace.py)."""
+    usage = resp.usage or {}
+    return {
+        "operation": operation,
+        "turn": turn,
+        "provider": llm.name,
+        "model": resp.model or llm.model,
+        "latency_ms": round(resp.latency_ms, 1),
+        "input_tokens": usage.get("prompt_tokens", usage.get("input_tokens")),
+        "output_tokens": usage.get("completion_tokens", usage.get("output_tokens")),
+        "tool_calls": [tc.name for tc in resp.tool_calls],
+    }
+
+
 _FOLLOW_UP = {"OFFER_REFUND": "Refund offer (operator-approved)", "REROUTE_OFFLINE": "Offline re-routing (operator-approved)"}
 
 

@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     # Operator ids allowed to sign policy waivers (REQUEST_POLICY_WAIVER), comma-separated
     duty_managers: str = "dm.park"
 
+    # --- Observability: export each settled task's trace over OTLP (needs the `otel` extra). Standard OTel env names.
+    otel_exporter_otlp_endpoint: str | None = Field(default=None, validation_alias="OTEL_EXPORTER_OTLP_ENDPOINT")
+    otel_service_name: str = Field(default="reroute", validation_alias="OTEL_SERVICE_NAME")
+
     # --- Retrieval: NeMo Retriever NIMs or local lexical index ---
     retriever_provider: Literal["nvidia", "lexical"] = "lexical"
     # llama-nemotron-embed-1b-v2 / rerank-1b-v2 were retired on build.nvidia.com on 2026-08-25 (HTTP 410)

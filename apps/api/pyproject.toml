@@ -23,7 +23,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6", "opentelemetry-sdk>=1.25"]
+# Export task traces over OTLP (OTEL_EXPORTER_OTLP_ENDPOINT): Langfuse, Arize Phoenix, Jaeger, Grafana Tempo, ...
+otel = ["opentelemetry-sdk>=1.25", "opentelemetry-exporter-otlp-proto-http>=1.25"]
 # NVIDIA cuOpt thin client (talks to a self-hosted cuOpt server). Optional: the
 # CuOptOptimizationProvider speaks the documented REST API directly via httpx.
 cuopt = ["cuopt-sh-client"]
