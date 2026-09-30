@@ -1,6 +1,6 @@
 # 예외 승객 처리: LLM 제안 + 결정적 검증기
 
-> 상태: **P1·P2 구현 완료** (검증기, 에이전트 루프 연동, shadow 모드 기록) · P3~P4 설계 단계
+> 상태: **P1~P3 구현 완료** (검증기, 에이전트 루프 연동, shadow 기록, assist 모드 승인) · P4 설계 단계
 
 ## 배경
 
@@ -110,7 +110,7 @@ LLM 호출과 I/O가 없는 순수 함수입니다. `verify_proposals(proposals,
 |---|---|---|
 | P1 | 공용 제약 함수, 검증기, 테스트 (LLM 동작 변화 없음) | ✅ 완료 |
 | P2 | `propose_exception_resolution` 툴, mock 규칙 기반 proposer(데모 + eval baseline), `ExceptionResolution` 저장. **shadow 모드**: 기록만 하고 UI에는 표시하지 않음 | ✅ 완료 |
-| P3 | 승인 API를 `exception_decisions[{item_id, ACCEPT/MODIFY/REJECT, override}]`로 확장, 승인 시점과 `authorize_execution` 시점 재검증, waiver 역할 확인, UI 카드 | 예정 |
+| P3 | **assist 모드**: 승인 API에 `exception_decisions`(ACCEPT/MODIFY/REJECT) 추가, control plane 재검증, duty manager 확인, waiver 감사 기록, 승인 화면 카드, MCP 노출 | ✅ 완료 |
 | P4 | LLMOps: 예외 단위 트레이싱, 골든셋, CI(mock)·nightly(Nemotron) eval 게이트 | 예정 |
 
 자동 실행은 단계 계획에 없습니다. 상태를 바꾸는 작업은 계속 사람이 승인합니다.
@@ -130,9 +130,40 @@ shadow 모드에서는 권고가 에이전트 타임라인과 위 조회 API에�
 
 KE123 mock 실행 결과: 4/4 권고, 1차 통과율 100%. P010은 7C1102 waiver(duty manager), P011·P013·P014는 체크리스트가 붙은 확인입니다.
 
-**P3로 넘긴 것**
-- 외부 에이전트(OpenClaw, MCP)에는 아직 제안 툴이 노출되지 않습니다. 이 경로의 계획은 권고 없이 기록됩니다(coverage 0).
-- 지금은 control plane이 worker가 보낸 검증 결과를 그대로 저장합니다. 권고를 운영자에게 보여주는 P3부터는 control plane이 DB의 승객·항공편 데이터로 **다시 검증**해야 합니다.
+## P3 구현 내용 (assist 모드)
+
+`EXCEPTION_RESOLUTION_MODE=assist`로 켭니다. 운영자는 승인 화면의 예외 권고 카드에서 승객별로 수락/거절을 고르고, 그 결정이 계획 승인과 함께 전송됩니다.
+
+```mermaid
+sequenceDiagram
+    participant A as Agent (worker 가능)
+    participant CP as Control plane
+    participant AL as Airline API
+    participant O as 운영자
+    A->>CP: create_plan (+ 권고와 에이전트 측 판정)
+    O->>CP: GET exception-resolutions
+    CP->>AL: 항공편·승객·대체편 (최신 재고)
+    CP-->>O: 권고 + control plane 재검증 판정
+    O->>CP: approve (exception_decisions)
+    CP->>AL: 최신 재고로 다시 조회
+    CP->>CP: 결정 전체를 함께 검증 + duty manager 확인
+    CP-->>O: 422/403 (아무것도 승인 안 됨) 또는 승인
+    A->>AL: 실행 토큰으로 예약 변경 (재고는 예약 API가 최종 확인)
+```
+
+| 항목 | 동작 |
+|---|---|
+| 재검증 위치 | **control plane**(`app/resolution/review.py`). worker가 보낸 판정은 참고용이며, 권고를 보여줄 때와 승인할 때 항공 API에서 재고를 새로 읽어 다시 검증합니다 |
+| 결정 | `ACCEPT`(권고 그대로) · `MODIFY`(운영자 자신의 제안, 같은 검증기를 통과해야 함) · `REJECT`(이번 계획에서 조치 없음) |
+| 원자성 | 결정 중 하나라도 검증에 실패하면 **아무것도 승인되지 않습니다**(422, 승객별 위반 사유) |
+| waiver 권한 | `DUTY_MANAGERS`에 있는 operator만 승인할 수 있습니다(403 `WAIVER_AUTHORITY`). 승인하면 감사 로그에 `policy.waiver`로 남습니다 |
+| 체크박스와의 관계 | 승객에 대한 결정이 있으면 기존 manual-review 체크박스보다 **결정이 우선**합니다 |
+| 실행 | 수락된 CONFIRM은 solver 좌석으로, REASSIGN/WAIVER는 새 좌석으로 실행 토큰에 포함됩니다. 승인 이후 좌석이 사라지면 예약 API가 거부하고 `EXECUTION_FAILED`로 남습니다 |
+| 최종 리포트 | 편별 집계에 waiver 좌석이 포함되고, 환불/외부 처리는 후속 조치로 나옵니다 |
+| 지표 | `operator_decisions`(수락/수정/거절 수)가 조회 API 지표에 추가됩니다 |
+| 외부 에이전트 | MCP에 `propose_exception_resolution`이 추가되어 OpenClaw의 권고도 같은 검증기를 거칩니다 |
+
+KE123을 대시보드에서 끝까지 실행했을 때: 4건 모두 수락한 뒤 일반 operator로 승인하면 403으로 거부되고 계획은 PENDING으로 남습니다. `dm.park`로 승인하면 **35명 전원이 재배정**되고, P010은 7C1102로 실행됩니다.
 
 ## LLMOps (P4)
 

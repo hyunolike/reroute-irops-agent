@@ -3,6 +3,7 @@
 import socket
 import threading
 import time
+from contextlib import contextmanager
 
 import httpx
 import pytest
@@ -18,8 +19,8 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-@pytest.fixture
-def live_control_plane(tmp_path):
+@contextmanager
+def serve_control_plane(tmp_path, **overrides):
     port = _free_port()
     base = f"http://127.0.0.1:{port}"
     settings = make_settings(
@@ -28,6 +29,7 @@ def live_control_plane(tmp_path):
         agent_worker_token="worker-secret",
         airline_api_base_url=base,
         reroute_api_base_url=base,
+        **overrides,
     )
     app, container = build_app(settings)
     container.http.transport = None  # real network from here on
@@ -38,22 +40,36 @@ def live_control_plane(tmp_path):
         if server.started:
             break
         time.sleep(0.05)
-    yield base, tmp_path
-    server.should_exit = True
-    t.join(timeout=5)
+    try:
+        yield base, tmp_path
+    finally:
+        server.should_exit = True
+        t.join(timeout=5)
+
+
+@pytest.fixture
+def live_control_plane(tmp_path):
+    with serve_control_plane(tmp_path) as live:
+        yield live
+
+
+def make_worker(base, tmp_path, **overrides) -> AgentWorker:
+    return AgentWorker(
+        make_settings(
+            tmp_path,
+            database_url="sqlite:///nonexistent-dir/never-used.db",  # the worker must not need a database
+            approval_signing_secret="worker-does-not-know-the-secret",
+            agent_worker_token="worker-secret",
+            airline_api_base_url=base,
+            reroute_api_base_url=base,
+            **overrides,
+        )
+    )
 
 
 async def test_worker_runs_task_end_to_end_without_db(live_control_plane):
     base, tmp_path = live_control_plane
-    worker_settings = make_settings(
-        tmp_path,
-        database_url="sqlite:///nonexistent-dir/never-used.db",  # the worker must not need a database
-        approval_signing_secret="worker-does-not-know-the-secret",
-        agent_worker_token="worker-secret",
-        airline_api_base_url=base,
-        reroute_api_base_url=base,
-    )
-    worker = AgentWorker(worker_settings)
+    worker = make_worker(base, tmp_path)
     async with httpx.AsyncClient(base_url=base) as client:
         task = (await client.post("/api/agent/tasks", json={"command": COMMAND})).json()
         assert task["state"] == "RECEIVED"  # queued for the worker, not run in-process
@@ -147,3 +163,27 @@ async def test_dashboard_reports_where_the_agent_actually_runs(live_control_plan
         assert after["security"]["agent_runtime"] == "openshell" and after["agent"]["worker"]["connected"] is True
         assert after["security"]["enforced_by"] == "NVIDIA OpenShell sandbox"
         assert (await client.get("/api/security/policy")).json()["agent_runtime"] == "openshell"
+
+
+async def test_worker_executes_an_operator_approved_waiver(tmp_path):
+    """Assist mode across the sandbox boundary: the worker recommends, the control plane re-verifies, a duty manager
+    approves, the worker executes the move, and the final report carries the decision."""
+    with serve_control_plane(tmp_path, exception_resolution_mode="assist") as (base, _):
+        worker = make_worker(base, tmp_path, exception_resolution_mode="assist")
+        async with httpx.AsyncClient(base_url=base) as client:
+            task = (await client.post("/api/agent/tasks", json={"command": COMMAND})).json()
+            assert await worker.run_once() is True
+            plan_id = (await client.get(f"/api/agent/tasks/{task['id']}")).json()["plan_id"]
+            recs = (await client.get(f"/api/rebooking/plans/{plan_id}/exception-resolutions")).json()["recommendations"]
+            assert {r["passenger_id"]: r["verdict"] for r in recs}["P010"] == "PASS_REQUIRES_WAIVER"
+            decisions = [{"passenger_id": r["passenger_id"], "decision": "ACCEPT"} for r in recs]
+            r = await client.post(
+                f"/api/rebooking/plans/{plan_id}/approve",
+                json={"exception_decisions": decisions},
+                headers={"X-Operator-Id": "dm.park"},
+            )
+            assert r.status_code == 200, r.text
+            assert await worker.run_once() is True
+            done = (await client.get(f"/api/agent/tasks/{task['id']}")).json()
+    assert done["state"] == "COMPLETED" and done["report"]["rebooked"] == 35
+    assert done["report"]["exception_decisions"]["P010"] == "REQUEST_POLICY_WAIVER"

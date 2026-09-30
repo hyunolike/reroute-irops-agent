@@ -27,6 +27,7 @@ from app.rag.documents import load_policy_chunks
 from app.rag.lexical import LexicalRetrieverProvider
 from app.rag.nvidia import NvidiaRetrieverProvider
 from app.repositories.agent import AgentRepository
+from app.resolution.review import ResolutionReviewer
 from app.security.governed_http import GovernedHttpClient
 from app.security.policy import OpenShellPolicy
 from app.services.knowledge import PolicyKnowledgeService
@@ -116,6 +117,16 @@ class Container:
         self.llm, self.llm_reason = build_llm(settings, self.http)
 
         self.tools = build_tool_registry(settings.exception_resolution_mode)
+        # control-plane re-verification of exception recommendations (assist mode); the transport is looked up per
+        # call so tests (and the in-process demo) can route the airline API without the network
+        self.reviewer = ResolutionReviewer(
+            self.gateway,
+            settings.airline_api_base_url,
+            lambda: self.http.transport,
+            duty_managers=settings.duty_manager_ids,
+            mode=settings.exception_resolution_mode,
+            timeout=settings.nim_timeout_seconds,
+        )
         self.orchestrator = AgentOrchestrator(
             repo=self.repo,
             llm=self.llm,
@@ -182,6 +193,7 @@ class Container:
             "demo_mode": s.demo_mode,
             "app_role": s.app_role,
             "llm": {"provider": self.llm.name, "model": self.llm.model, "nvidia": self.llm.nvidia, "reason": self.llm_reason},
+            "exception_resolution": {"mode": s.exception_resolution_mode},
             "retriever": {
                 "provider": self.knowledge.primary.name,
                 "nvidia": self.knowledge.primary.nvidia,

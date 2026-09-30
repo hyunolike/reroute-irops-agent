@@ -202,6 +202,8 @@ class Approval(Base):
     approved_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     approved_manual_item_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # operator decisions on exception recommendations (assist mode), as verified by the control plane
+    exception_decisions: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

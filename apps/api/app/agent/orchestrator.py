@@ -458,7 +458,11 @@ class AgentOrchestrator:
             EventType.APPROVAL,
             Component.APPROVAL_GATEWAY,
             f"Plan approved by {approval.approved_by}" + (f" - “{approval.comment}”" if approval.comment else ""),
-            {"approval_id": approval.id, "approved_manual_items": approval.approved_manual_item_ids},
+            {
+                "approval_id": approval.id,
+                "approved_manual_items": approval.approved_manual_item_ids,
+                "exception_decisions": len(getattr(approval, "exception_decisions", None) or []),
+            },
         )
         self._set_state(task_id, AgentState.EXECUTING, "Executing approved plan")
         ctx = ToolContext(
@@ -499,6 +503,10 @@ class AgentOrchestrator:
     def final_report(self, plan_id: str) -> dict[str, Any]:
         plan = self.gateway.get_plan(plan_id)
         items = plan.items
+        approval = self.gateway.get_approval(plan_id)
+        # a remote gateway returns namespaces instead of dicts
+        decisions = [d if isinstance(d, dict) else _as_dict(d) for d in (getattr(approval, "exception_decisions", None) or [])]
+        names = {i.passenger_id: i.passenger_name for i in items}
         by = lambda st: [i for i in items if i.status == st]  # noqa: E731
         rebooked = by(AssignmentStatus.EXECUTED.value)
         return {
@@ -522,11 +530,27 @@ class AgentOrchestrator:
                     if i.status in (AssignmentStatus.HELD_FOR_OPERATOR.value, AssignmentStatus.NO_FEASIBLE.value)
                 ],
                 f"Meal vouchers for {sum(1 for i in rebooked if (i.delay_minutes or 0) >= 180)} passengers delayed ≥ 3h [IROP-004]",
+                *[
+                    f"{_FOLLOW_UP[d['action']]}: {names.get(d['passenger_id'], d['passenger_id'])} "
+                    + " ".join(f"[{p}]" for p in d["proposal"]["policy_ids"])
+                    for d in decisions
+                    if d["action"] in _FOLLOW_UP
+                ],
             ],
+            "exception_decisions": {d["passenger_id"]: d["action"] or d["decision"] for d in decisions},
         }
 
 
 # ---------------------------------------------------------------------- utilities
+_FOLLOW_UP = {"OFFER_REFUND": "Refund offer (operator-approved)", "REROUTE_OFFLINE": "Offline re-routing (operator-approved)"}
+
+
+def _as_dict(ns: Any) -> Any:
+    if isinstance(ns, list):
+        return [_as_dict(x) for x in ns]
+    return {k: _as_dict(v) for k, v in vars(ns).items()} if hasattr(ns, "__dict__") else ns
+
+
 def no_action_justified(memory: AgentMemory) -> bool:
     """The planner may stop without a plan only if the facts say no re-accommodation is needed."""
     f = memory.flight

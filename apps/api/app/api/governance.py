@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from app.api.deps import get_container
 from app.container import Container
-from app.db.models import AgentEvent, AgentTask, Approval, AuditLog, RebookingPlan, RebookingPlanItem
+from app.db.models import AgentEvent, AgentTask, Approval, AuditLog, ExceptionResolution, RebookingPlan, RebookingPlanItem
 from app.security.openshell_logs import parse_openshell_line
 from app.seed.loader import seed_database
 
@@ -199,7 +199,7 @@ def demo_reset(c: Container = Depends(get_container)) -> dict:
     if not c.settings.allow_demo_reset:
         raise HTTPException(403, "demo reset disabled")
     with c.db.session() as s:
-        for model in (AuditLog, AgentEvent, Approval, RebookingPlanItem, RebookingPlan, AgentTask):
+        for model in (AuditLog, AgentEvent, Approval, ExceptionResolution, RebookingPlanItem, RebookingPlan, AgentTask):
             s.query(model).delete()
         s.commit()
         if c.settings.app_role in ("all", "airline"):

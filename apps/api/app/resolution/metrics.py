@@ -9,8 +9,11 @@ from typing import Any
 REJECTED = "REJECTED"
 
 
-def resolution_metrics(exception_ids: Iterable[str], attempts: list[dict[str, Any]]) -> dict[str, Any]:
-    """`attempts`: persisted ResolutionAttempt rows as dicts (passenger_id, attempt, action, verdict, final, violations)."""
+def resolution_metrics(
+    exception_ids: Iterable[str], attempts: list[dict[str, Any]], decisions: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    """`attempts`: persisted ResolutionAttempt rows as dicts (passenger_id, attempt, action, verdict, final, violations).
+    `decisions`: the operator's decisions stored on the approval (assist mode)."""
     exceptions = sorted(set(exception_ids))
     final = {a["passenger_id"]: a for a in attempts if a["final"]}
     firsts = [a for a in attempts if a["attempt"] == 1]
@@ -25,4 +28,6 @@ def resolution_metrics(exception_ids: Iterable[str], attempts: list[dict[str, An
         "actions": {pid: final[pid]["action"] for pid in exceptions if pid in final},
         "without_recommendation": [pid for pid in exceptions if pid not in final],
         "waivers_requested": sorted(pid for pid, a in final.items() if a["verdict"] == "PASS_REQUIRES_WAIVER"),
+        # how operators treated the recommendations: the online quality signal
+        "operator_decisions": dict(Counter(d["decision"] for d in decisions or [] if d["passenger_id"] in final)),
     }

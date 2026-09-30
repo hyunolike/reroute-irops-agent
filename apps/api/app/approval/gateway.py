@@ -21,7 +21,7 @@ from app.db.base import Database, utcnow
 from app.db.models import Approval, ExceptionResolution, RebookingPlan, RebookingPlanItem
 from app.domain.enums import ApprovalStatus, AssignmentStatus, PlanStatus
 from app.domain.models import OptimizationResult, PolicyHit
-from app.resolution.models import ResolutionAttempt
+from app.resolution.models import FLIGHT_ACTIONS, ResolutionAction, ResolutionAttempt
 
 
 class ApprovalError(PermissionError):
@@ -165,8 +165,14 @@ class ApprovalGateway:
 
     # ------------------------------------------------------------------ operator decisions
     def approve(
-        self, plan_id: str, operator: str, comment: str | None = None, manual_item_ids: list[str] | None = None
+        self,
+        plan_id: str,
+        operator: str,
+        comment: str | None = None,
+        manual_item_ids: list[str] | None = None,
+        exception_decisions: list[dict[str, Any]] | None = None,
     ) -> Approval:
+        """`exception_decisions` must already be verified by the control plane (resolution/review.py)."""
         if not operator or operator.lower().startswith(("agent", "reroute-agent")):
             raise ApprovalError("approvals must be made by a human operator identity")
         with self.db.session() as s:
@@ -178,7 +184,13 @@ class ApprovalGateway:
             if approval is None or approval.status != ApprovalStatus.PENDING.value:
                 raise ApprovalConflict(f"approval is {approval.status if approval else 'missing'}, not PENDING")
             valid_manual = {i.id for i in plan.items if i.status == AssignmentStatus.MANUAL_REVIEW.value and i.alternative_flight}
-            chosen = [i for i in (manual_item_ids or []) if i in valid_manual]
+            decided = {d["item_id"]: d for d in exception_decisions or []}
+            # an explicit exception decision overrides the manual-review checkbox for that passenger
+            chosen = [i for i in (manual_item_ids or []) if i in valid_manual and i not in decided]
+            chosen += [
+                i for i, d in decided.items() if d["action"] == ResolutionAction.CONFIRM_SOLVER_ASSIGNMENT and i in valid_manual
+            ]
+            approval.exception_decisions = list(decided.values())
             approval.status = ApprovalStatus.APPROVED.value
             approval.approved_by = operator
             approval.comment = comment
@@ -235,6 +247,17 @@ class ApprovalGateway:
                     or (i.status == AssignmentStatus.MANUAL_REVIEW.value and i.id in approval.approved_manual_item_ids)
                 )
             ]
+            by_id = {i.id: i for i in plan.items}
+            items += [  # operator-approved moves to another flight (re-assignment or duty-manager waiver)
+                {
+                    "reservation_id": by_id[d["item_id"]].reservation_id,
+                    "flight_no": d["seat"]["flight_no"],
+                    "cabin": d["seat"]["cabin"],
+                    "item_id": d["item_id"],
+                }
+                for d in approval.exception_decisions or []
+                if d["action"] in FLIGHT_ACTIONS and d["seat"]
+            ]
             s.commit()
             wire = [{k: v for k, v in it.items() if k != "item_id"} for it in items]
             claims = ApprovalClaims(
@@ -250,6 +273,8 @@ class ApprovalGateway:
         with self.db.session() as s:
             plan = s.scalar(select(RebookingPlan).options(selectinload(RebookingPlan.items)).where(RebookingPlan.id == plan_id))
             by_res = {r["reservation_id"]: r for r in results}
+            approval = s.scalar(select(Approval).where(Approval.plan_id == plan_id).order_by(Approval.created_at.desc()))
+            decided = {d["item_id"]: d for d in (approval.exception_decisions if approval else None) or []}
             ok = failed = 0
             for item in plan.items:
                 r = by_res.get(item.reservation_id)
@@ -260,6 +285,11 @@ class ApprovalGateway:
                 if r.get("status") == "CONFIRMED":
                     item.status = AssignmentStatus.EXECUTED.value
                     item.new_reservation_id = r.get("new_reservation_id")
+                    d = decided.get(item.id)
+                    if d and d["action"] in FLIGHT_ACTIONS:
+                        item.alternative_flight, item.new_cabin = r["flight_no"], r["cabin"]
+                        waiver = f", policy waiver signed by {d['decided_by']}" if d["required_role"] else ""
+                        item.reason = f"{item.reason} Operator-approved exception resolution: {d['action']}{waiver}."
                     ok += 1
                 else:
                     item.status = AssignmentStatus.EXECUTION_FAILED.value

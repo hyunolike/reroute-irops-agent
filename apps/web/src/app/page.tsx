@@ -12,6 +12,7 @@ import { AllocationTable } from "@/components/AllocationTable";
 import { PolicyEvidence } from "@/components/PolicyEvidence";
 import { Briefing } from "@/components/Briefing";
 import { ApprovalPanel } from "@/components/ApprovalPanel";
+import { ExceptionRecommendations } from "@/components/ExceptionRecommendations";
 import { FinalReport } from "@/components/FinalReport";
 import { SecurityPanel } from "@/components/SecurityPanel";
 import { AuditLog } from "@/components/AuditLog";
@@ -19,7 +20,7 @@ import { WelcomeBoard } from "@/components/WelcomeBoard";
 import { Empty } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAgentTask } from "@/lib/useAgentTask";
-import type { AgentChoice, Runtime, Task } from "@/lib/types";
+import type { AgentChoice, DecisionKind, ExceptionRecommendation, Runtime, Task } from "@/lib/types";
 
 const RUNNING = new Set(["RECEIVED", "ANALYZING_DISRUPTION", "FETCHING_PASSENGERS", "SEARCHING_ALTERNATIVES", "RETRIEVING_POLICIES", "OPTIMIZING", "GENERATING_PROPOSAL", "EXECUTING"]);
 
@@ -28,6 +29,9 @@ export default function Dashboard() {
   const [resetting, setResetting] = useState(false);
   const [hoverPolicy, setHoverPolicy] = useState<string | null>(null);
   const [selectedManual, setSelectedManual] = useState<string[]>([]);
+  // assist mode: the operator's accept / reject per exception recommendation, sent with the approval
+  const [decisions, setDecisions] = useState<Record<string, DecisionKind>>({});
+  const [recommendations, setRecommendations] = useState<ExceptionRecommendation[]>([]);
   const [auditKey, setAuditKey] = useState(0);
   const { task, events, plan, error, transport, run, follow, attach, clear, setPlan } = useAgentTask();
   const [external, setExternal] = useState<Task | null>(null);
@@ -57,6 +61,7 @@ export default function Dashboard() {
   const onRun = useCallback(
     (cmd: string, agent: AgentChoice) => {
       setSelectedManual([]);
+      setDecisions({});
       void run(cmd, agent);
     },
     [run],
@@ -68,6 +73,7 @@ export default function Dashboard() {
       await api.reset();
       clear();
       setSelectedManual([]);
+      setDecisions({});
       setAuditKey((k) => k + 1);
     } finally {
       setResetting(false);
@@ -75,6 +81,15 @@ export default function Dashboard() {
   };
 
   const busy = !!task && RUNNING.has(task.state);
+  const assist = runtime?.exception_resolution?.mode === "assist";
+  const waiverSelected = recommendations.some((r) => r.required_role && decisions[r.passenger_id] === "ACCEPT");
+  const setDecision = (pid: string, d: DecisionKind | null) =>
+    setDecisions((s) => {
+      const next = { ...s };
+      if (d) next[pid] = d;
+      else delete next[pid];
+      return next;
+    });
   const briefingAuthor = events.some((e) => e.component === "nemotron" && e.title.startsWith("Operator briefing")) ? "Nemotron (NIM)" : "grounded template";
 
   return (
@@ -142,12 +157,24 @@ export default function Dashboard() {
             {plan && (
               <>
                 <Kpis plan={plan} />
+                {assist && (
+                  <ExceptionRecommendations
+                    plan={plan}
+                    decisions={decisions}
+                    setDecision={setDecision}
+                    hoverPolicy={hoverPolicy}
+                    setHoverPolicy={setHoverPolicy}
+                    onLoaded={setRecommendations}
+                  />
+                )}
                 <div className="grid gap-4 xl:grid-cols-2">
                   <Briefing text={plan.explanation} author={briefingAuthor} hover={hoverPolicy} setHover={setHoverPolicy} />
                   <div className="space-y-4">
                     <ApprovalPanel
                       plan={plan}
                       selectedManual={selectedManual}
+                      decisions={decisions}
+                      waiverSelected={waiverSelected}
                       onDecided={(p) => {
                         setPlan(p);
                         setAuditKey((k) => k + 1);

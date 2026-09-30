@@ -16,6 +16,7 @@ log = logging.getLogger("reroute.db")
 # (table, column, column DDL)
 ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
     ("agent_tasks", "pending", "VARCHAR(16)"),
+    ("approvals", "exception_decisions", "JSON"),
 ]
 
 

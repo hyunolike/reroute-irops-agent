@@ -85,3 +85,17 @@ class ResolutionAttempt(BaseModel):
     mode: str = "shadow"
     planner: str = ""
     prompt_version: str = ""
+
+
+class DecisionKind(StrEnum):
+    ACCEPT = "ACCEPT"  # take the planner's recommendation as is
+    MODIFY = "MODIFY"  # the operator's own proposal instead (verified the same way)
+    REJECT = "REJECT"  # no action for this passenger in this plan
+
+
+class ExceptionDecision(BaseModel):
+    """An operator's decision on one exception passenger, sent with the plan approval."""
+
+    passenger_id: str
+    decision: DecisionKind
+    proposal: ExceptionProposal | None = Field(default=None, description="MODIFY only")
