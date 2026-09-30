@@ -24,6 +24,7 @@ https://github.com/user-attachments/assets/3676a23d-fc44-42bb-8b70-774336f012c3
 | 🎞️ 21초 런칭 영상 | [docs/video/reroute-launch.mp4](docs/video/reroute-launch.mp4) — 결항 → 한 문장 지시 → cuOpt 재배정 → 사람 승인 흐름 |
 | 📖 심사위원 3분 가이드 | http://localhost:3000/guide · [발표 대본 (영문)](docs/demo-scenario.md) |
 | 🤖 에이전트 구조와 동작 (그림 7종) | [docs/agent.md](docs/agent.md) · [English](docs/agent.en.md) |
+| 🧩 예외 승객 처리와 LLMOps (설계·구현) | [docs/exception-resolution.md](docs/exception-resolution.md) · 아래 [예외 승객 처리](#예외-승객-처리-llm-제안--결정적-검증) 절 |
 | 🧭 시스템 아키텍처 (Mermaid 다이어그램 7종) | [docs/architecture.md](docs/architecture.md) · [English](docs/architecture.en.md) |
 | 🟩 NVIDIA 연동 방식과 검증 수준 | [docs/nvidia-integration.md (영문)](docs/nvidia-integration.md) · [nvidia/](nvidia/) |
 | ☁️ AWS 배포 (Terraform) | [infra/terraform/README.md](infra/terraform/README.md) · [English](infra/terraform/README.en.md) · 아래 [AWS 배포](#aws-배포) 절 |
@@ -41,7 +42,7 @@ https://github.com/user-attachments/assets/3676a23d-fc44-42bb-8b70-774336f012c3
 
 ## 목차
 1. [문제](#문제) · 2. [해결책](#해결책) · 3. [왜 Agentic AI인가](#왜-agentic-ai인가) · 4. [왜 NVIDIA인가](#왜-nvidia인가)
-5. [아키텍처](#아키텍처) · [LLM 에이전트 동작 방식](#llm-에이전트-동작-방식) · [NemoClaw·OpenClaw 연동](#nemoclaw--openclaw-연동-mcp) · 6. [NVIDIA 스택과 실행 모드](#nvidia-스택과-실행-모드) · 7. [데모](#데모) · 8. [시작하기](#시작하기)
+5. [아키텍처](#아키텍처) · [LLM 에이전트 동작 방식](#llm-에이전트-동작-방식) · [예외 승객 처리](#예외-승객-처리-llm-제안--결정적-검증) · [NemoClaw·OpenClaw 연동](#nemoclaw--openclaw-연동-mcp) · 6. [NVIDIA 스택과 실행 모드](#nvidia-스택과-실행-모드) · 7. [데모](#데모) · 8. [시작하기](#시작하기)
 9. [클라우드 배포 구조](#클라우드-배포-구조) · [AWS 배포](#aws-배포) · 10. [보안](#보안) · 11. [최적화 모델](#최적화-모델) · 12. [화면](#화면) · 13. [향후 계획](#향후-계획)
 
 ---
@@ -83,6 +84,9 @@ KE123 데모 결과 (cuOpt와 CPU 대체 solver가 **동일한 MILP**를 풀어 
 같은 허용 항공편에서 선착순 수작업과 비교하면 **연결편 놓침 4 → 0, 특수지원 규정 위반 2 → 0, 비즈니스 다운그레이드 2 → 1,
 VIP 평균 지연 5시간 40분 → 4시간**입니다. 전체 평균 지연은 6분 늘어나는데, 연결편과 VIP를 보호하기 위한 **의도된 trade-off**이며
 화면에 그대로 표시합니다.
+
+자동 배정되지 않은 4명은 LLM이 승객별 처리 방법을 제안하고 결정적 검증기가 판정합니다. assist 모드에서 duty manager가 권고를 승인하면
+P010도 정책 면제로 7C1102에 재배정되어 **35명 전원이 재보호**됩니다. → [예외 승객 처리](#예외-승객-처리-llm-제안--결정적-검증)
 
 ## 왜 Agentic AI인가
 
@@ -153,7 +157,7 @@ OPTIMIZING → GENERATING_PROPOSAL → WAITING_APPROVAL → EXECUTING → COMPLE
 |---|---|
 | 계획 먼저 | 첫 응답에서 3~6단계 계획을 세우고, 매 도구 호출 전에 운영자의 언어로 짧은 추론을 남깁니다 (타임라인에 표시) |
 | 도구 피드백 | 규정 검색 결과에 `coverage`(확보된 규정 / 빠진 규정 / 추천 질의)가 포함되어, 모델이 스스로 추가 검색을 판단합니다 |
-| 예외 추론 | 최적화 후 `explore_exception_options`로 예외 승객의 선택지와 차단 사유를 조사하고, 근거 있는 조치를 브리핑에 담습니다 |
+| 예외 추론 | 최적화 후 `explore_exception_options`로 예외 승객의 선택지와 차단 사유를 조사하고, `propose_exception_resolution`으로 승객별 조치를 하나씩 제안합니다. 결정적 검증기를 통과한 제안만 권고가 됩니다 |
 | 가드레일 | 잘못된 순서·인자는 오류로 되돌려 모델이 고치게 합니다. 모델이 일찍 멈추면 **다음에 할 일을 구체적으로 안내**합니다 (최대 2회) |
 | 견고성 | 텍스트로 온 도구 호출(`<TOOLCALL>` 등) 파싱, `<think>` 분리, 429/5xx 재시도. 끝까지 진행이 안 될 때만 스크립트 플래너가 이어받고 그 사실을 기록합니다 |
 | 결정 경계 | 모델은 배정을 바꿀 수 없고(solver가 결정), 예약 변경은 승인 없이 불가능합니다 |
@@ -165,6 +169,37 @@ OPTIMIZING → GENERATING_PROPOSAL → WAITING_APPROVAL → EXECUTING → COMPLE
 > 무료 엔드포인트는 실행마다 429/500/503을 13~21회 돌려주는데, 재시도(최대 4회, `Retry-After` 반영)가 모두 흡수했습니다.
 > 재시도가 2회였을 때는 실행마다 1~2개 시나리오가 스크립트 플래너로 넘어갔습니다. 모델이 도구 순서를 틀린 경우는 가드레일이 되돌려 고쳤습니다.
 > 실제 모델의 불완전한 행동(도구 하나씩 호출, 순서 오류, 인자 형식 오류, 중간 멈춤)은 가짜 모델 테스트로도 검증합니다.
+
+## 예외 승객 처리: LLM 제안 + 결정적 검증
+
+> 설계와 구현 상세: [docs/exception-resolution.md](docs/exception-resolution.md)
+
+solver가 자동 배정하지 못한 승객(운영자 검토 3명, 대안 없음 1명)은 LLM이 처리 방법을 제안합니다.
+단, LLM은 좌석을 직접 정하지 않고 **코드가 열거한 선택지 안에서** 액션 하나를 고릅니다. "LLM은 배정을 결정하지 않는다"는 원칙은 그대로입니다.
+
+| 단계 | 누가 | 무엇을 |
+|---|---|---|
+| 선택지 열거 | 코드 (`explore_exception_options`) | 대체편마다 차단 제약과 정책 ID, 남은 좌석, duty manager 면제 가능 여부 |
+| 제안 | LLM (`propose_exception_resolution`) | 확인 · 재배정 · 정책 면제 · 환불 · 시스템 외 처리 중 하나와 근거 정책, 운영자 체크리스트 |
+| 검증 | 결정적 검증기 (solver와 같은 제약 코드) | 지어낸 편·정책, 면제할 수 없는 제약(MCT·SSR·좌석) 면제, 제안 전체를 합친 좌석 초과를 거부. 거부되면 1회 수정 |
+| 재검증 | control plane | 권고를 보여줄 때와 승인할 때 항공 API의 최신 재고로 다시 검증. 하나라도 실패하면 아무것도 승인되지 않음 |
+| 결정 | 운영자 | 승객별 수락 · 수정 · 거절. 정책 면제는 duty manager(`DUTY_MANAGERS`)만 승인하고 감사 로그에 남음 |
+
+| `EXCEPTION_RESOLUTION_MODE` | 동작 |
+|---|---|
+| `shadow` (기본) | 권고를 기록만 하고 화면·승인 흐름은 그대로 둡니다. 품질을 먼저 측정하는 단계입니다 |
+| `assist` | 승인 화면에 예외 권고 카드가 나오고 운영자가 승객별로 결정합니다 |
+| `off` | 사용하지 않습니다 |
+
+**LLMOps**
+- **트레이스:** `GET /api/agent/tasks/{id}/trace`. 예외 승객마다 분석 → 제안·검증 판정 → 운영자 결정을 한 스팬으로 묶고, 턴마다 모델·토큰·지연을 기록합니다.
+  OpenTelemetry GenAI 속성 이름을 쓰며, `OTEL_EXPORTER_OTLP_ENDPOINT`를 설정하면 Langfuse·Arize Phoenix·Jaeger 등으로 OTLP 전송합니다.
+- **평가:** `make eval-exceptions`. 사람이 라벨링한 [골든셋](data/evals/exception_golden.yaml)(데모 데이터 변형 5케이스, 예외 승객 20명)으로 채점하고
+  [게이트](config/eval_gates.yaml)(검증 우회 0, 예외 승객 전원 권고, 1차 검증 통과율 ≥ 0.9, 정확도 ≥ 0.9, 인용 정밀도 ≥ 0.95, 반복 일관성 ≥ 0.8)를 적용합니다.
+  채점 전에 라벨이 현재 solver·검증기와 맞는지(drift)부터 확인합니다.
+- **CI:** push마다 scripted 플래너로, 매일 밤 Nemotron으로(`eval-nightly`, `NVIDIA_API_KEY` secret 필요) 같은 게이트를 적용합니다.
+
+> scripted 플래너는 모든 게이트를 통과합니다. Nemotron의 골든셋 결과는 아직 측정 전입니다.
 
 ## NemoClaw · OpenClaw 연동 (MCP)
 
@@ -230,6 +265,9 @@ REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://<도메인>/mcp            
 6. **Run all probes** → OpenShell 정책 판정: 미등록 외부 호스트, 자기 승인 호출, `~/.ssh/id_rsa`, 비밀값 접근 모두 차단
 7. 시나리오 **KE125 45분 지연** → 에이전트가 RBK-002를 찾아 "조치 불필요"로 종료
 
+`EXCEPTION_RESOLUTION_MODE=assist`로 실행하면 5번 전에 **예외 권고 카드**가 나옵니다. 4건을 수락하고 일반 operator로 승인하면
+"duty manager 승인 필요"로 거부되고, `dm.park`로 승인하면 P010까지 **35명 전원**이 재배정됩니다.
+
 ## 시작하기
 
 ### Docker (권장)
@@ -250,7 +288,8 @@ open http://localhost:3000      # API 문서: http://localhost:8000/docs
 
 ```bash
 make install                    # uv 가상환경(Python 3.12) + npm ci
-make test                       # 백엔드 테스트 99개
+make test                       # 백엔드 테스트 154개
+make eval-exceptions            # 예외 권고 골든셋 평가 + 릴리스 게이트 (REPEATS=3이면 일관성까지)
 DATABASE_URL=sqlite:///./reroute.db make dev-api    # 또는 로컬 PostgreSQL
 make dev-web                    # http://localhost:3000 (/api는 :8000으로 프록시)
 ```
@@ -442,11 +481,13 @@ C6  항공사·시간 한도·운항 상태가 규정상 허용   (IROP-002, IRO
 
 ```
 apps/api      FastAPI: Mock 항공사 API, 에이전트(오케스트레이터·도구·LLM 어댑터), RAG, 최적화,
-              승인 게이트웨이, 감사 로그, OpenShell 정책 평가, worker, MCP 서버, OpenClaw 브리지 — 테스트 99개
+              승인 게이트웨이, 감사 로그, OpenShell 정책 평가, worker, MCP 서버, OpenClaw 브리지,
+              예외 권고 검증기·평가 러너·트레이스 — 테스트 154개
 apps/web      Next.js + TypeScript + Tailwind 운영 대시보드와 심사위원 가이드
 documents     항공사 규정 문서 (IROP, RBK, SSR, FARE, VIP, MCT) + 기계가 읽는 파라미터
 data/seed     KE123 시나리오: 항공편 9편, 승객 35명
-config        최적화 가중치
+data/evals    예외 권고 골든셋 (사람이 단 라벨)
+config        최적화 가중치, 평가 게이트
 nvidia        openshell · nemoclaw · cuopt · skills
 infra         terraform (AWS)
 docs          아키텍처 · 데모 시나리오 · NVIDIA 연동 · 화면 캡처
@@ -455,9 +496,11 @@ tests/e2e     MVP 완료 기준 자동 점검
 
 ## 품질
 
-- 백엔드 테스트 99개: 운항·승객 조회, 규정 검색과 출처, 최적화 제약 C1–C6 전부, 가중치, cuOpt REST 형식,
+- 백엔드 테스트 154개: 운항·승객 조회, 규정 검색과 출처, 최적화 제약 C1–C6 전부, 가중치, cuOpt REST 형식,
   승인 필수, 무단 실행 차단, 토큰 변조, 승인 만료, 재배정 성공, OpenShell 정책 스키마와 판정, NIM 요청 형식과 재시도·장애 시 전환,
-  DB 없는 원격 worker(실제 HTTP, 시작 시 컨트롤 플레인 대기), MCP 서버, 대시보드→OpenClaw 브리지, 스키마 마이그레이션.
+  DB 없는 원격 worker(실제 HTTP, 시작 시 컨트롤 플레인 대기), MCP 서버, 대시보드→OpenClaw 브리지, 스키마 마이그레이션,
+  예외 권고 검증기(solver와 판정 일치), 승인 시 재검증·duty manager 권한, 트레이스·OTLP 전송, 평가 게이트가 나쁜 플래너를 잡는지.
+- 예외 권고 평가(`make eval-exceptions`): 골든셋 채점과 릴리스 게이트, CI에서 매번 실행.
 - 실제 NVIDIA 모델 평가(`make eval-llm`)와 AWS 라이브 데모의 OpenShell 샌드박스 금지 행동 점검(자기 승인, 메타데이터, 미등록 호스트).
 - 전체 흐름 자동 점검(`tests/e2e/smoke.sh`)과 Playwright 브라우저 시연.
 - CI: 코드 검사, PostgreSQL에서 테스트와 자동 점검, 웹 타입 검사·빌드, `terraform validate`, Docker 이미지 빌드.

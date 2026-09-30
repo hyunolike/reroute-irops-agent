@@ -25,6 +25,7 @@ https://github.com/user-attachments/assets/3676a23d-fc44-42bb-8b70-774336f012c3
 | 🎞️ 21-second launch video | [docs/video/reroute-launch.mp4](docs/video/reroute-launch.mp4) — cancellation → one-sentence command → cuOpt re-accommodation → human approval |
 | 📖 3-minute judge guide | http://localhost:3000/guide · [docs/demo-scenario.md](docs/demo-scenario.md) |
 | 🤖 Agent structure & behaviour (7 diagrams) | [docs/agent.en.md](docs/agent.en.md) · [한국어](docs/agent.md) |
+| 🧩 Exception passengers & LLMOps (design + implementation) | [docs/exception-resolution.md (Korean)](docs/exception-resolution.md) · [section below](#exception-passengers-llm-proposes-a-deterministic-verifier-decides) |
 | 🧭 System architecture (7 Mermaid diagrams) | [docs/architecture.en.md](docs/architecture.en.md) · [한국어](docs/architecture.md) |
 | 🟩 NVIDIA integration & verification status | [docs/nvidia-integration.md](docs/nvidia-integration.md) · [nvidia/](nvidia/) |
 | ☁️ AWS deployment (Terraform) | [infra/terraform/README.en.md](infra/terraform/README.en.md) · [한국어](infra/terraform/README.md) |
@@ -42,7 +43,7 @@ A two-part write-up of the design decisions behind this repository (ReRoute).
 
 ## Contents
 1. [Problem](#problem) · 2. [Solution](#solution) · 3. [Why Agentic AI?](#why-agentic-ai) · 4. [Why NVIDIA?](#why-nvidia)
-5. [Architecture](#architecture) · [How the LLM agent works](#how-the-llm-agent-works) · [NemoClaw · OpenClaw](#nemoclaw--openclaw-integration-mcp) · 6. [NVIDIA stack & run modes](#nvidia-stack--run-modes) · 7. [Demo](#demo) · 8. [Getting started](#getting-started)
+5. [Architecture](#architecture) · [How the LLM agent works](#how-the-llm-agent-works) · [Exception passengers](#exception-passengers-llm-proposes-a-deterministic-verifier-decides) · [NemoClaw · OpenClaw](#nemoclaw--openclaw-integration-mcp) · 6. [NVIDIA stack & run modes](#nvidia-stack--run-modes) · 7. [Demo](#demo) · 8. [Getting started](#getting-started)
 9. [Cloud deployment](#cloud-deployment) · [AWS deployment](#aws-deployment) · 10. [Security](#security) · 11. [Optimization](#optimization) · 12. [Screenshots](#screenshots) · 13. [Future work](#future-work)
 
 ---
@@ -85,6 +86,10 @@ KE123 demo result (cuOpt and the CPU fallback solve the **same MILP** and reach 
 Versus an FCFS desk process on the same eligible flights: **missed connections 4 → 0, special-assistance violations 2 → 0,
 business downgrades 2 → 1, VIP average delay 5h40m → 4h00m.** Overall average delay rises by 6 minutes — an **intended
 trade-off** to protect connections and VIPs, shown openly in the UI.
+
+For the 4 passengers the solver could not auto-assign, the LLM recommends one action each and a deterministic verifier
+rules on it. In assist mode, once a duty manager approves the recommendations, P010 is re-protected on 7C1102 through a
+policy waiver and **all 35 passengers are rebooked**. → [Exception passengers](#exception-passengers-llm-proposes-a-deterministic-verifier-decides)
 
 ## Why Agentic AI?
 
@@ -154,7 +159,7 @@ With the default `LLM_PROVIDER=auto` and an NVIDIA key, **Nemotron chooses the n
 |---|---|
 | Plan first | The first reply is a 3–6 step plan; before each tool call the model writes a short rationale in the operator's language (shown in the timeline) |
 | Tool feedback | Policy search returns `coverage` (grounded rules / missing rules / suggested queries), so the model decides when to search more |
-| Exception reasoning | After optimization, `explore_exception_options` examines each exception passenger's options and blocking constraints; grounded actions go into the briefing |
+| Exception reasoning | After optimization, `explore_exception_options` examines each exception passenger's options and blocking constraints, then `propose_exception_resolution` recommends one action per passenger. Only proposals that pass the deterministic verifier become recommendations |
 | Guardrails | Wrong order / arguments come back as errors for the model to fix; if it stops early it gets a **concrete next-step instruction** (up to 2×) |
 | Robustness | Text-form tool calls (`<TOOLCALL>` …) are parsed, `<think>` separated, 429/5xx retried. Only if it still cannot finish does the scripted planner take over — and that is logged |
 | Decision boundary | The model cannot change the allocation (the solver decides) and cannot change bookings without approval |
@@ -166,6 +171,38 @@ scores final state, tools used, guidance interventions, fallback, and solver res
 > The hosted endpoint returned 13–21 transient 429/500/503 responses per run; retries (up to 4, honouring `Retry-After`) absorbed all of them.
 > With only 2 retries, 1–2 scenarios per run fell back to the scripted planner. Wrong tool order from the model was corrected by the guardrails.
 > Tests with fake models that behave imperfectly (one tool per turn, wrong order, wrong argument shape, stopping early) also cover this.
+
+## Exception passengers: LLM proposes, a deterministic verifier decides
+
+> Design and implementation details: [docs/exception-resolution.md](docs/exception-resolution.md) (Korean)
+
+For the passengers the solver could not auto-assign (3 manual review, 1 no feasible option) the LLM recommends what to do.
+It never picks seats freely: it chooses **one action from options the code enumerated**. "The LLM does not decide passenger
+allocation" still holds.
+
+| Step | Who | What |
+|---|---|---|
+| Enumerate options | code (`explore_exception_options`) | per alternative flight: blocking constraint and policy id, seats left, whether a duty manager may waive it |
+| Propose | LLM (`propose_exception_resolution`) | confirm · reassign · policy waiver · refund · offline re-routing, with cited policies and an operator checklist |
+| Verify | deterministic verifier (the solver's own constraint code) | rejects invented flights or policies, waivers of non-waivable constraints (MCT, SSR, seats), and seat overbooking across all proposals together; one correction allowed |
+| Re-verify | control plane | against fresh airline inventory when the recommendation is shown and again at approval; if any decision fails, nothing is approved |
+| Decide | operator | accept · modify · reject per passenger; policy waivers only by a duty manager (`DUTY_MANAGERS`), recorded in the audit log |
+
+| `EXCEPTION_RESOLUTION_MODE` | Behaviour |
+|---|---|
+| `shadow` (default) | recommendations are recorded only; the console and the approval flow are unchanged (measure quality first) |
+| `assist` | the approval console shows a recommendation card per exception passenger and the operator decides |
+| `off` | disabled |
+
+**LLMOps**
+- **Tracing:** `GET /api/agent/tasks/{id}/trace` — one span per exception passenger from analysis through proposal and verdict to the operator's decision, plus model / tokens / latency for every planner turn.
+  OpenTelemetry GenAI attribute names; set `OTEL_EXPORTER_OTLP_ENDPOINT` to export over OTLP (Langfuse, Arize Phoenix, Jaeger, ...).
+- **Evaluation:** `make eval-exceptions` scores the planner on a human-labelled [golden set](data/evals/exception_golden.yaml) (5 variations of the demo day, 20 exception passengers)
+  and applies [release gates](config/eval_gates.yaml): no verifier bypass, every exception covered, first-pass verification ≥ 0.9, accuracy ≥ 0.9, citation precision ≥ 0.95, consistency ≥ 0.8.
+  Labels are checked against the current solver and verifier (drift) before anything is scored.
+- **CI:** the same gates run with the scripted planner on every push and with Nemotron nightly (`eval-nightly`, needs the `NVIDIA_API_KEY` secret).
+
+> The scripted planner passes every gate. Nemotron has not been measured on the golden set yet.
 
 ## NemoClaw · OpenClaw integration (MCP)
 
@@ -236,6 +273,9 @@ presentation. Full script: [docs/demo-scenario.md](docs/demo-scenario.md).
 6. **Run all probes** → OpenShell policy decisions: unknown host, self-approval, `~/.ssh/id_rsa`, secrets all denied
 7. Scenario **KE125 45-min delay** → the agent finds RBK-002 and stops with "no action required"
 
+With `EXCEPTION_RESOLUTION_MODE=assist`, **exception recommendation cards** appear before step 5. Accept all 4 and approve as a
+regular operator → refused ("duty manager approval required"); approve as `dm.park` → P010 is rebooked too, **35 of 35**.
+
 ## Getting started
 
 ### Docker (recommended)
@@ -256,7 +296,8 @@ open http://localhost:3000      # API docs: http://localhost:8000/docs
 
 ```bash
 make install                    # uv venv (Python 3.12) + npm ci
-make test                       # 99 backend tests
+make test                       # 154 backend tests
+make eval-exceptions            # exception-recommendation golden set + release gates (REPEATS=3 adds consistency)
 DATABASE_URL=sqlite:///./reroute.db make dev-api    # or a local PostgreSQL
 make dev-web                    # http://localhost:3000 (proxies /api to :8000)
 ```
@@ -445,11 +486,13 @@ Full-page views: [plan](docs/screenshots/03b-plan-full.png) · [completed](docs/
 
 ```
 apps/api      FastAPI: mock airline API, agent (orchestrator, tools, LLM adapters), RAG, optimization,
-              approval gateway, audit, OpenShell policy mirror, worker, MCP server, OpenClaw bridge — 99 tests
+              approval gateway, audit, OpenShell policy mirror, worker, MCP server, OpenClaw bridge,
+              exception verifier, eval runner, tracing — 154 tests
 apps/web      Next.js + TypeScript + Tailwind operations dashboard and judge guide
 documents     airline policy corpus (IROP, RBK, SSR, FARE, VIP, MCT) with machine-readable params
 data/seed     KE123 scenario: 9 flights, 35 passengers
-config        optimization weights
+data/evals    exception-recommendation golden set (human labels)
+config        optimization weights, eval gates
 nvidia        openshell · nemoclaw · cuopt · skills
 infra         terraform (AWS)
 docs          architecture · demo scenario · NVIDIA integration · screenshots
@@ -458,7 +501,8 @@ tests/e2e     smoke test of the MVP definition of done
 
 ## Quality
 
-- 99 backend tests: flight / passenger lookup, policy retrieval & provenance, every optimization constraint (C1–C6), weights, cuOpt REST contract, approval required, unauthorized execution blocked, token tampering, expiry, successful rebooking, OpenShell policy schema & decisions, NIM request contract, retries & fallback, DB-less remote worker over real HTTP (waits for the control plane at start), MCP server, dashboard → OpenClaw bridge, schema migration.
+- 154 backend tests: flight / passenger lookup, policy retrieval & provenance, every optimization constraint (C1–C6), weights, cuOpt REST contract, approval required, unauthorized execution blocked, token tampering, expiry, successful rebooking, OpenShell policy schema & decisions, NIM request contract, retries & fallback, DB-less remote worker over real HTTP (waits for the control plane at start), MCP server, dashboard → OpenClaw bridge, schema migration, exception verifier (agrees with the solver), re-verification and duty-manager authority at approval, tracing and OTLP export, eval gates catching bad planners.
+- Exception-recommendation evaluation (`make eval-exceptions`): golden-set scoring and release gates, run in CI on every push.
 - Real NVIDIA model evaluation (`make eval-llm`) and OpenShell denials checked in the live AWS sandbox (self-approval, metadata, unregistered hosts).
 - End-to-end smoke test (`tests/e2e/smoke.sh`) and a Playwright walkthrough of the dashboard.
 - CI: lint, tests + smoke on PostgreSQL, web typecheck/build, `terraform validate`, Docker builds.
