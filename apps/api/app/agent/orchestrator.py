@@ -17,7 +17,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.agent.prompts import BRIEFING_PROMPT, SYSTEM_PROMPT
+from app.agent.prompts import BRIEFING_PROMPT, prompt_version, system_prompt
 from app.approval.gateway import ApprovalError, ApprovalGateway
 from app.domain.enums import AgentState, AssignmentStatus, Component, EventType
 from app.providers.llm.base import LLMError, LLMProvider, LLMResponse, ToolCall
@@ -46,6 +46,7 @@ class AgentOrchestrator:
         component_overrides: dict[str, Component] | None = None,
         step_delay_ms: int = 0,
         max_steps: int = 30,
+        resolution_mode: str = "shadow",
     ) -> None:
         self.repo = repo
         self.llm = llm
@@ -58,6 +59,9 @@ class AgentOrchestrator:
         self.component_overrides = component_overrides or {}
         self.step_delay_ms = step_delay_ms
         self.max_steps = max_steps
+        self.resolution_mode = resolution_mode
+        self.system_prompt = system_prompt(tools.get("propose_exception_resolution") is not None)
+        self.prompt_version = prompt_version(self.system_prompt)
         self._external: dict[str, ToolContext] = {}
         self._state: dict[str, str] = {}
 
@@ -92,10 +96,15 @@ class AgentOrchestrator:
         llm_ref: dict[str, LLMProvider] = {"llm": self.llm}
         ctx = ToolContext(task_id=task_id, agent=self.agent, memory=memory, http=self.http, gateway=self.gateway)
         ctx.write_briefing = lambda: self._write_briefing(task_id, memory, llm_ref)
+        ctx.planner_info = lambda: {
+            "planner": f"{llm_ref['llm'].name}/{llm_ref['llm'].model}",
+            "prompt_version": self.prompt_version,
+            "mode": self.resolution_mode,
+        }
         self._state[task_id] = ""
         self._set_state(task_id, AgentState.RECEIVED, f"Goal received: “{task.command}”")
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": task.command},
         ]
         schemas = self.tools.schemas()
@@ -220,6 +229,8 @@ class AgentOrchestrator:
         ctx = ToolContext(task_id=task_id, agent=self.agent, memory=memory, http=self.http, gateway=self.gateway)
         llm_ref: dict[str, LLMProvider] = {"llm": self.llm}
         ctx.write_briefing = lambda: self._write_briefing(task_id, memory, llm_ref)
+        # the external agent brings its own prompt, so no prompt version is recorded for it
+        ctx.planner_info = lambda: {"planner": "external", "prompt_version": "", "mode": self.resolution_mode}
         self._external[task_id] = ctx
 
     def _external_ctx(self, task_id: str) -> ToolContext:

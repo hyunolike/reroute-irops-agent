@@ -22,7 +22,7 @@ FLIGHT_ACTIONS = frozenset({ResolutionAction.REASSIGN_TO_OPTION, ResolutionActio
 
 
 class ExceptionProposal(BaseModel):
-    passenger_id: str
+    passenger_id: str = Field(description="MANUAL_REVIEW or NO_FEASIBLE passenger, e.g. P010")
     action: ResolutionAction
     flight_no: str | None = Field(default=None, description="REASSIGN_TO_OPTION / REQUEST_POLICY_WAIVER only")
     cabin: Cabin | None = Field(default=None, description="defaults to the passenger's booked cabin")
@@ -69,3 +69,19 @@ class VerifiedProposal(BaseModel):
     @property
     def accepted(self) -> bool:
         return self.verdict != Verdict.REJECTED
+
+
+class ResolutionAttempt(BaseModel):
+    """What gets persisted per planner attempt (via the Approval Gateway, so a DB-less worker can record it too)."""
+
+    passenger_id: str
+    attempt: int
+    action: ResolutionAction
+    proposal: dict
+    verdict: Verdict
+    violations: list[Violation] = Field(default_factory=list)
+    required_role: str | None = None
+    final: bool = False
+    mode: str = "shadow"
+    planner: str = ""
+    prompt_version: str = ""

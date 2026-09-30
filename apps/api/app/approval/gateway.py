@@ -18,9 +18,10 @@ from sqlalchemy.orm import selectinload
 
 from app.approval.tokens import ApprovalClaims, items_digest, mint_token
 from app.db.base import Database, utcnow
-from app.db.models import Approval, RebookingPlan, RebookingPlanItem
+from app.db.models import Approval, ExceptionResolution, RebookingPlan, RebookingPlanItem
 from app.domain.enums import ApprovalStatus, AssignmentStatus, PlanStatus
 from app.domain.models import OptimizationResult, PolicyHit
+from app.resolution.models import ResolutionAttempt
 
 
 class ApprovalError(PermissionError):
@@ -70,6 +71,7 @@ class ApprovalGateway:
         policy_hits: list[PolicyHit],
         explanation: str,
         requested_by: str,
+        exception_resolutions: list[ResolutionAttempt | dict[str, Any]] | None = None,
     ) -> tuple[RebookingPlan, Approval]:
         with self.db.session() as s:
             plan = RebookingPlan(
@@ -121,6 +123,9 @@ class ApprovalGateway:
                 )
             s.add(plan)
             s.flush()
+            for r in exception_resolutions or []:
+                r = ResolutionAttempt.model_validate(r)
+                s.add(ExceptionResolution(plan_id=plan.id, task_id=task_id, **r.model_dump(mode="json")))
             approval = Approval(
                 plan_id=plan.id,
                 status=ApprovalStatus.PENDING.value,
@@ -141,6 +146,11 @@ class ApprovalGateway:
                 raise PlanNotFound(plan_id)
             self._expire_if_needed(s, plan)
             return plan
+
+    def get_exception_resolutions(self, plan_id: str) -> list[ExceptionResolution]:
+        with self.db.session() as s:
+            q = select(ExceptionResolution).where(ExceptionResolution.plan_id == plan_id)
+            return list(s.scalars(q.order_by(ExceptionResolution.passenger_id, ExceptionResolution.attempt)))
 
     def get_approval(self, plan_id: str) -> Approval | None:
         with self.db.session() as s:

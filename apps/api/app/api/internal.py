@@ -21,6 +21,7 @@ from app.api.rebooking import plan_view
 from app.approval.gateway import ApprovalConflict, ApprovalRequired, PlanNotFound
 from app.container import Container
 from app.domain.models import OptimizationResult, PolicyHit
+from app.resolution.models import ResolutionAttempt
 
 
 def require_worker(
@@ -116,6 +117,7 @@ class PlanIn(BaseModel):
     policy_hits: list[PolicyHit]
     explanation: str
     requested_by: str
+    exception_resolutions: list[ResolutionAttempt] = Field(default_factory=list)
 
 
 @router.post("/plans", status_code=201)

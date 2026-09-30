@@ -38,6 +38,7 @@ class ProposeRebooking(Tool):
             policy_hits=sorted(m.policy_hits.values(), key=lambda h: h.policy_id),
             explanation=briefing,
             requested_by=ctx.agent,
+            exception_resolutions=m.resolution_attempts,
         )
         m.plan_id, m.approval_id = plan.id, approval.id
         return ToolResult(

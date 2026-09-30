@@ -1,6 +1,6 @@
 # 예외 승객 처리: LLM 제안 + 결정적 검증기
 
-> 상태: **P1 구현 완료** (공용 제약 함수 + 검증기 + 테스트) · P2~P4 설계 단계
+> 상태: **P1·P2 구현 완료** (검증기, 에이전트 루프 연동, shadow 모드 기록) · P3~P4 설계 단계
 
 ## 배경
 
@@ -109,11 +109,30 @@ LLM 호출과 I/O가 없는 순수 함수입니다. `verify_proposals(proposals,
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | P1 | 공용 제약 함수, 검증기, 테스트 (LLM 동작 변화 없음) | ✅ 완료 |
-| P2 | `propose_exception_resolution` 툴, mock 규칙 기반 proposer(데모 + eval baseline), `ExceptionResolution` 저장. **shadow 모드**: 기록만 하고 UI에는 표시하지 않음 | 예정 |
+| P2 | `propose_exception_resolution` 툴, mock 규칙 기반 proposer(데모 + eval baseline), `ExceptionResolution` 저장. **shadow 모드**: 기록만 하고 UI에는 표시하지 않음 | ✅ 완료 |
 | P3 | 승인 API를 `exception_decisions[{item_id, ACCEPT/MODIFY/REJECT, override}]`로 확장, 승인 시점과 `authorize_execution` 시점 재검증, waiver 역할 확인, UI 카드 | 예정 |
 | P4 | LLMOps: 예외 단위 트레이싱, 골든셋, CI(mock)·nightly(Nemotron) eval 게이트 | 예정 |
 
 자동 실행은 단계 계획에 없습니다. 상태를 바꾸는 작업은 계속 사람이 승인합니다.
+
+## P2 구현 내용 (shadow 모드)
+
+| 구성 요소 | 위치 | 내용 |
+|---|---|---|
+| 제안 툴 | `app/tools/resolution.py` | 승객당 1개 제안을 받아, 이미 통과한 다른 승객들의 제안과 **함께** 검증합니다. 거부되면 위반 사유를 돌려주고 1회 수정 기회를 줍니다(승객당 최대 2회). 이미 다른 승객에게 권고된 좌석을 뺏는 제안도 거부합니다 |
+| 규칙 기반 제안기 | `app/resolution/baseline.py` | `explore_exception_options` 결과만 보고 제안합니다. mock 플래너(데모)와 eval baseline이 같이 씁니다 |
+| 저장 | `exception_resolutions` 테이블 | 모든 시도를 저장합니다(최종 채택 여부 `final` 포함). 플래너(`provider/model`)와 **프롬프트 버전**(시스템 프롬프트 내용 해시)을 함께 기록합니다. `create_plan` 경로로 저장하므로 DB가 없는 sandbox worker에서도 동작합니다 |
+| 조회 | `GET /api/rebooking/plans/{id}/exception-resolutions` | 시도 목록과 지표(coverage, 1차 통과율, 위반 코드 분포, 액션, waiver 요청) |
+| 평가 | `make eval-llm` | KE123 시나리오에 "예외 승객 전원 권고" 체크가 추가되고, 1차 통과율과 baseline 일치율을 출력합니다 |
+| 설정 | `EXCEPTION_RESOLUTION_MODE` | `shadow`(기본) 또는 `off`. `off`면 툴이 등록되지 않고 프롬프트에서도 빠집니다 |
+
+shadow 모드에서는 권고가 에이전트 타임라인과 위 조회 API에만 남습니다. 브리핑, 승인 화면, 승인·실행 흐름은 `off`일 때와 **동일**합니다(`test_shadow_mode_does_not_change_what_the_operator_sees_or_approves`로 고정).
+
+KE123 mock 실행 결과: 4/4 권고, 1차 통과율 100%. P010은 7C1102 waiver(duty manager), P011·P013·P014는 체크리스트가 붙은 확인입니다.
+
+**P3로 넘긴 것**
+- 외부 에이전트(OpenClaw, MCP)에는 아직 제안 툴이 노출되지 않습니다. 이 경로의 계획은 권고 없이 기록됩니다(coverage 0).
+- 지금은 control plane이 worker가 보낸 검증 결과를 그대로 저장합니다. 권고를 운영자에게 보여주는 P3부터는 control plane이 DB의 승객·항공편 데이터로 **다시 검증**해야 합니다.
 
 ## LLMOps (P4)
 

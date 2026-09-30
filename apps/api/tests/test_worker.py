@@ -60,6 +60,9 @@ async def test_worker_runs_task_end_to_end_without_db(live_control_plane):
         assert await worker.run_once() is True
         task = (await client.get(f"/api/agent/tasks/{task['id']}")).json()
         assert task["state"] == "WAITING_APPROVAL"
+        # exception recommendations made inside the sandbox reach the control plane through the plan API
+        res = (await client.get(f"/api/rebooking/plans/{task['plan_id']}/exception-resolutions")).json()
+        assert res["metrics"]["coverage"] == 1.0 and res["metrics"]["waivers_requested"] == ["P010"]
 
         # Without approval the worker cannot obtain an execution grant
         r = worker.cp.request("POST", f"/internal/agent/plans/{task['plan_id']}/execution-grant")

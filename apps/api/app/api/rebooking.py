@@ -8,7 +8,9 @@ from pydantic import BaseModel, Field
 from app.api.deps import get_container
 from app.approval.gateway import ApprovalConflict, ApprovalError, ApprovalRequired, PlanNotFound
 from app.container import Container
-from app.db.models import Approval, RebookingPlan
+from app.db.models import Approval, ExceptionResolution, RebookingPlan
+from app.domain.enums import AssignmentStatus
+from app.resolution.metrics import resolution_metrics
 
 router = APIRouter(prefix="/api/rebooking", tags=["rebooking & approval"])
 
@@ -87,6 +89,43 @@ def _operator(x_operator_id: str | None) -> str:
 @router.get("/plans/{plan_id}")
 def get_plan(plan_id: str, c: Container = Depends(get_container)) -> dict:
     return _load(c, plan_id)
+
+
+def resolution_view(r: ExceptionResolution) -> dict:
+    return {
+        "passenger_id": r.passenger_id,
+        "attempt": r.attempt,
+        "action": r.action,
+        "proposal": r.proposal,
+        "verdict": r.verdict,
+        "violations": r.violations,
+        "required_role": r.required_role,
+        "final": r.final,
+        "mode": r.mode,
+        "planner": r.planner,
+        "prompt_version": r.prompt_version,
+        "created_at": r.created_at.isoformat(),
+    }
+
+
+@router.get("/plans/{plan_id}/exception-resolutions")
+def exception_resolutions(plan_id: str, c: Container = Depends(get_container)) -> dict:
+    """Every recommendation the planner made for the plan's exception passengers, with the verifier's verdicts.
+
+    In shadow mode these are recorded for evaluation only: the approval flow and the operator console ignore them.
+    """
+    try:
+        plan = c.gateway.get_plan(plan_id)
+    except PlanNotFound as e:
+        raise HTTPException(404, "plan not found") from e
+    rows = [resolution_view(r) for r in c.gateway.get_exception_resolutions(plan_id)]
+    exceptions = [
+        i.passenger_id
+        for i in plan.items
+        if i.status
+        in (AssignmentStatus.MANUAL_REVIEW.value, AssignmentStatus.NO_FEASIBLE.value, AssignmentStatus.HELD_FOR_OPERATOR.value)
+    ]
+    return {"plan_id": plan_id, "metrics": resolution_metrics(exceptions, rows), "attempts": rows}
 
 
 @router.post("/plans/{plan_id}/approve")

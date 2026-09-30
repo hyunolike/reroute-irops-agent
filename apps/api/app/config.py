@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     nim_max_retries: int = 4
     # Maximum planner turns per task (a real model may call tools one at a time)
     agent_max_steps: int = 30
+    # Exception passengers (MANUAL_REVIEW / NO_FEASIBLE): the planner recommends one verified action each.
+    # "shadow" records the recommendations for evaluation without showing them to operators; "off" disables it.
+    exception_resolution_mode: Literal["off", "shadow"] = "shadow"
 
     # --- Retrieval: NeMo Retriever NIMs or local lexical index ---
     retriever_provider: Literal["nvidia", "lexical"] = "lexical"
