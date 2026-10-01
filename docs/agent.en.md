@@ -15,6 +15,7 @@ For the overall system and deployment see [architecture.en.md](architecture.en.m
 | [6. Recovery paths](#6-recovery-paths) | when the model is wrong or stops |
 | [7. Two execution modes](#7-two-execution-modes) | inside the API vs sandboxed worker |
 | [8. External agent mode](#8-external-agent-mode-openclaw--mcp) | OpenClaw in NemoClaw uses ReRoute over MCP |
+| [9. Exception passengers](#9-exception-passengers-propose--verify--approve) | Passengers the solver could not auto-assign: LLM proposes → verifier → operator decides |
 
 ---
 
@@ -33,15 +34,16 @@ flowchart TB
             fb["Scripted planner<br/>(only without a key; warning in UI)"]
         end
 
-        subgraph hands["🛠 Hands — 8 tools (typed arguments)"]
+        subgraph hands["🛠 Hands — 9 tools (typed arguments)"]
             t1["Lookup<br/>get_disrupted_flight<br/>get_affected_passengers<br/>search_alternative_flights"]
             t2["Knowledge<br/>search_rebooking_policy"]
             t3["Delegate decision<br/>optimize_rebooking"]
-            t4["Exception analysis<br/>explore_exception_options"]
+            t4["Exception analysis · proposal<br/>explore_exception_options<br/>propose_exception_resolution"]
             t5["Propose · execute<br/>propose_rebooking<br/>execute_rebooking 🔒"]
         end
 
-        mem[("📒 Working memory<br/>flight · passengers · alternatives<br/>retrieved policies · optimization result<br/>exception analyses · plan id")]
+        mem[("📒 Working memory<br/>flight · passengers · alternatives<br/>retrieved policies · optimization result<br/>exception analyses · recommendations · plan id")]
+        ver["✅ Deterministic verifier<br/>rules on exception proposals<br/>with the solver's own constraints"]
         guard["🛡 Governed egress<br/>every call: policy check → audit"]
         log["📡 Event log<br/>→ dashboard live (SSE)"]
     end
@@ -49,6 +51,7 @@ flowchart TB
     orch <--> brain
     orch --> hands
     hands <--> mem
+    t4 --> ver
     hands --> guard
     orch --> log
 
@@ -59,9 +62,10 @@ flowchart TB
 ```
 
 - **Brain:** picks what to do next. In real mode Nemotron chooses the tool and its arguments every turn.
-- **Hands:** the 8 tools. Every domain action goes through them to an HTTP API; the agent never touches the database.
+- **Hands:** the 9 tools. Every domain action goes through them to an HTTP API; the agent never touches the database.
 - **Memory:** large data (35 passengers) lives here; the LLM only sees summaries (diagram 5).
 - **Safety:** the orchestrator checks order, arguments and preconditions; every outbound call is checked against the OpenShell policy and audited.
+- **Verifier:** rules on the LLM's proposals for exception passengers with the same constraint code the solver uses; only proposals that pass become recommendations (diagram 9).
 
 ## 2. Agent loop (plan → act → observe)
 
@@ -69,7 +73,7 @@ flowchart TB
 flowchart TD
     start(["Goal received<br/>RECEIVED"]) --> think
 
-    think["🧠 Send to the LLM<br/>system rules + conversation + 8 tool schemas"] --> resp{"Does the reply<br/>contain tool calls?"}
+    think["🧠 Send to the LLM<br/>system rules + conversation + 9 tool schemas"] --> resp{"Does the reply<br/>contain tool calls?"}
 
     resp -- "yes (several allowed)" --> v1{"Registered tool?"}
     v1 -- no --> err["Return the error to the LLM<br/>(guardrail event logged)"]
@@ -123,12 +127,14 @@ sequenceDiagram
     T->>S: memory data + policies → MILP → cuOpt
     S-->>T: allocation (31 auto · 3 review · 1 no feasible)
     L-->>O: explore_exception_options(P010, P011, P013, P014)
-    T-->>O: P010: 7C1102 would save the connection but is blocked by IROP-002
+    T-->>O: P010: 7C1102 would save the connection but is blocked by IROP-002 (waivable)
+    L-->>O: propose_exception_resolution × 4 (one action per passenger)
+    T-->>O: verifier: P010 policy waiver → needs a duty manager · P011, P013, P014 confirm → PASS
     L-->>O: propose_rebooking(KE123)
     O->>L: write operator briefing from solver facts (citations verified)
     T->>S: store plan + request approval (PENDING)
     O-->>Op: WAITING_APPROVAL (live on the dashboard)
-    Note over Op,S: only after approval: execute_rebooking → gateway token → Booking API
+    Note over Op,S: only after approval: execute_rebooking → gateway token → Booking API<br/>in assist mode the operator accepts / rejects each exception recommendation (diagram 9)
 ```
 
 The model decides how many tools to call per turn and how often to search, so turn structure varies between runs.
@@ -141,13 +147,14 @@ flowchart TB
     subgraph llm["🧠 Nemotron decides"]
         l1["which tool to call next"]
         l2["search wording · whether to search more"]
-        l3["which exception passengers to analyse"]
+        l3["which exception passengers to analyse<br/>what to recommend for each"]
         l4["the operator briefing text"]
     end
     subgraph code["🧭 Orchestrator code enforces"]
         c1["registered tools · argument schema · preconditions"]
         c2["state machine · turn budget"]
         c3["briefing citations verified"]
+        c4["exception proposals verified<br/>(solver constraints · seats summed)"]
     end
     subgraph solver["🧮 cuOpt solver decides"]
         s1["who goes on which flight and cabin"]
@@ -158,6 +165,7 @@ flowchart TB
     subgraph human["👤 Human decides"]
         h1["approve / reject"]
         h2["whether review passengers are included"]
+        h3["accept · modify · reject exception recommendations<br/>(policy waivers: duty manager only)"]
     end
     subgraph shell["🛡 OpenShell decides"]
         o1["reachable hosts · paths · files"]
@@ -171,6 +179,8 @@ flowchart TB
 ```
 
 The LLM decides **how to work**. It does not decide **outcomes (allocation) or permissions (approval, access)**.
+The same holds for exception passengers: the LLM picks from options the code enumerated, and a verifier and a human stand
+between its recommendation and any booking.
 
 ## 5. What the LLM sees and does not see
 
@@ -182,6 +192,8 @@ flowchart LR
         a3["result summaries<br/>e.g. 35 pax · 3 VIP · 5 connections"]
         a4["policy excerpts + coverage"]
         a5["optimization summary · exception list"]
+        a6["exception passengers' options<br/>(blocking constraint · policy id · waivable)"]
+        a7["the verifier's verdict on each proposal"]
     end
     subgraph hidden["Never passes through the LLM"]
         b1["full data of 35 passengers"]
@@ -209,6 +221,7 @@ flowchart TD
     x6["Persistent NIM outage"] --> g5
     x7["Call to a non-allowed host"] --> g7["Blocked by OpenShell policy + audited"]
     x8["Execute without approval"] --> g8["Approval gateway 403 + audited"]
+    x9["Exception proposal breaks a rule<br/>e.g. invented flight, MCT / SSR waiver"] --> g9["Verifier REJECTED + violations<br/>one correction, then no recommendation"] --> ok
 ```
 
 ## 7. Two execution modes
@@ -252,7 +265,7 @@ sequenceDiagram
     MCP->>O: open external-planner session
     O-->>D: "task started by external agent"
     loop OpenClaw plans
-        OC->>MCP: get_disrupted_flight / search_rebooking_policy / optimize_rebooking …
+        OC->>MCP: get_disrupted_flight / search_rebooking_policy / optimize_rebooking<br/>explore_exception_options / propose_exception_resolution …
         MCP->>O: same validation · preconditions · state machine
         O-->>MCP: result or error + next_step_hint
         MCP-->>OC: observation
@@ -265,9 +278,56 @@ sequenceDiagram
 ```
 
 Even with an external brain, ReRoute's rules hold: no optimization without policy coverage, no "no action" without the facts,
-and only humans approve.
+and only humans approve. An external agent's exception proposals go through the same verifier.
+
+## 9. Exception passengers (propose → verify → approve)
+
+> Design and implementation details: [exception-resolution.md](exception-resolution.md) (Korean)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant L as Nemotron
+    participant T as Tools (agent)
+    participant V as Verifier
+    participant CP as Control plane
+    participant AL as Airline API
+    actor Op as Operator
+
+    L->>T: explore_exception_options(P010)
+    T-->>L: per alternative: blocking constraint · policy id · waivable
+    L->>T: propose_exception_resolution(P010, waiver → 7C1102, IROP-002)
+    T->>V: verify together with the proposals that already passed
+    alt violation (invented flight · non-waivable constraint · seats exceeded)
+        V-->>L: REJECTED + violations → one correction
+    else passes
+        V-->>T: PASS_REQUIRES_WAIVER (needs a duty manager)
+    end
+    T->>CP: plan + recorded attempts (planner, prompt version)
+    Op->>CP: fetch recommendations (assist mode)
+    CP->>AL: fresh inventory
+    CP-->>Op: recommendation cards, re-verified
+    Op->>CP: approve + decision per passenger (accept · modify · reject)
+    CP->>AL: fresh inventory
+    CP->>CP: verify all decisions together · waivers need a duty manager
+    alt anything fails
+        CP-->>Op: 422 / 403 — nothing is approved
+    else passes
+        CP-->>Op: approved → waiver seats in the execution token → Booking API
+    end
+```
+
+| Mode (`EXCEPTION_RESOLUTION_MODE`) | What the operator sees |
+|---|---|
+| `shadow` (default) | nothing; recommendations are recorded for evaluation and tracing |
+| `assist` | recommendation cards in the approval console; accept or reject per passenger |
+| `off` | nothing; the proposal tool is not registered |
+
+Every step shows up in the trace (`GET /api/agent/tasks/{id}/trace`) as one span per exception passenger, and the golden-set
+evaluation (`make eval-exceptions`) measures the quality.
 
 ---
 
-Code: `apps/api/app/agent/orchestrator.py` (loop · guardrails) · `app/agent/prompts.py` (rules) · `app/tools/` (8 tools) ·
-`app/providers/llm/` (Nemotron adapter · selection) · `app/agent/worker.py` (sandbox worker) · `app/agent/evaluate.py` (real-model evaluation) · `app/integrations/mcp_server.py` (MCP server)
+Code: `apps/api/app/agent/orchestrator.py` (loop · guardrails) · `app/agent/prompts.py` (rules) · `app/tools/` (9 tools) ·
+`app/providers/llm/` (Nemotron adapter · selection) · `app/agent/worker.py` (sandbox worker) · `app/agent/evaluate.py` (real-model evaluation) · `app/integrations/mcp_server.py` (MCP server) ·
+`app/resolution/` (exception verifier · control-plane re-verification) · `app/observability/` (trace · OTLP) · `app/evals/` (golden-set evaluation)

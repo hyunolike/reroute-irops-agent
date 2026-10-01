@@ -11,6 +11,7 @@ components with explicit interfaces. Each one closes a different failure mode of
 | Hallucinated airline rules | Policies only enter the model through `search_rebooking_policy`; retrieved `policy-params` compile into constraints; missing coverage is reported, not guessed |
 | LLM "decides" who flies | Allocation is a MILP solved by cuOpt; the LLM receives only a summary and cannot write the plan |
 | Over-privileged agent | OpenShell sandbox: deny-by-default egress, L7 rules, `deny_rules` on approval endpoints, FS allow-list, non-root |
+| LLM exception recommendation breaks a rule | Proposals for passengers the solver could not auto-assign are ruled on by a deterministic verifier (the solver's own constraint code); the control plane re-verifies against fresh inventory and only a duty manager approves policy waivers |
 | Unauthorised state change | Approval Gateway + signed, single-use, item-bound token verified by the Booking API |
 | Invisible behaviour | Every state change, tool call, policy decision, approval and booking write is in the event log / audit log |
 
@@ -34,10 +35,12 @@ flowchart TB
         ks[Knowledge service<br/>policy RAG]
         os_[Optimization service<br/>MILP formulation]
         internal[Internal worker API<br/>/internal/agent/*]
+        rv["Exception re-verification<br/>fresh inventory · duty manager"]
+        tr["Trace<br/>/api/agent/tasks/{id}/trace"]
     end
 
     subgraph sandbox[NVIDIA OpenShell sandbox]
-        agent[ReRoute agent runtime<br/>orchestrator + tools]
+        agent["ReRoute agent runtime<br/>orchestrator + 9 tools<br/>+ exception verifier"]
     end
 
     agentapi -. inline mode .-> agent
@@ -50,6 +53,8 @@ flowchart TB
     ks -- "embed + rerank" --> ret[NeMo Retriever NIMs]
     os_ -- "POST /cuopt/request · GET /cuopt/solution" --> cuopt[NVIDIA cuOpt server - GPU]
     docs[(documents/*.md<br/>airline policies)] --> ks
+    rv -- "GET /api/flights/** (fresh inventory)" --> airline
+    tr -. "OTLP (optional)" .-> otlp["OTLP collector<br/>Langfuse · Phoenix · Jaeger"]
 
     cp --> db[(PostgreSQL)]
     airline --> db
@@ -57,7 +62,7 @@ flowchart TB
 
 Bounded contexts share one PostgreSQL instance but not tables: the **airline domain**
 (flights, passengers, reservations, disruptions) is owned by the airline service; the **agent domain**
-(tasks, events, plans, approvals, audit) by the control plane. The agent never touches either directly.
+(tasks, events, plans, approvals, audit, exception recommendations) by the control plane. The agent never touches either directly.
 
 ## 2. Agent workflow (state machine)
 
@@ -72,8 +77,9 @@ stateDiagram-v2
     SEARCHING_ALTERNATIVES --> RETRIEVING_POLICIES: search_rebooking_policy (parallel queries)
     RETRIEVING_POLICIES --> RETRIEVING_POLICIES: guardrail - coverage incomplete
     RETRIEVING_POLICIES --> OPTIMIZING: optimize_rebooking
-    OPTIMIZING --> GENERATING_PROPOSAL: propose_rebooking
-    GENERATING_PROPOSAL --> WAITING_APPROVAL
+    OPTIMIZING --> GENERATING_PROPOSAL: explore_exception_options
+    GENERATING_PROPOSAL --> GENERATING_PROPOSAL: propose_exception_resolution (per passenger, verifier verdict)
+    GENERATING_PROPOSAL --> WAITING_APPROVAL: propose_rebooking
     WAITING_APPROVAL --> EXECUTING: operator approves
     WAITING_APPROVAL --> REJECTED: operator rejects
     WAITING_APPROVAL --> WAITING_APPROVAL: approval expires -> re-approval required
@@ -86,7 +92,9 @@ stateDiagram-v2
 
 Nemotron chooses the next tool; the orchestrator enforces: known tool, Pydantic-validated arguments,
 tool preconditions (e.g. `optimize_rebooking` requires passengers, alternatives and full policy coverage),
-a step budget (14), and that `execute_rebooking` only succeeds through the Approval Gateway.
+a budget of 30 planner turns (`AGENT_MAX_STEPS`), and that `execute_rebooking` only succeeds through the Approval Gateway.
+`propose_exception_resolution` is only allowed after that passenger's exception analysis, at most twice per passenger
+(the proposal and one correction).
 If NIM is unavailable, the task switches to the deterministic planner and says so in the event log.
 
 ## 3. Sequence (KE123 cancellation)
@@ -117,11 +125,19 @@ sequenceDiagram
     AG->>SOLVE: optimize_rebooking(handles only)
     SOLVE->>SOLVE: compile retrieved policy-params -> constraints
     SOLVE-->>AG: allocation (source of truth)
+    loop each exception passenger (P010, P011, P013, P014)
+        AG->>LLM: explore_exception_options result
+        LLM-->>AG: propose_exception_resolution
+        AG->>AG: verifier verdict (seats summed with the other proposals)
+    end
     AG->>LLM: briefing from solver facts (citations verified)
-    AG->>GW: propose_rebooking -> plan + approval PENDING
+    AG->>GW: propose_rebooking -> plan + approval PENDING + recorded recommendations
     GW-->>UI: WAITING_APPROVAL (SSE)
-    Op->>UI: Approve (+ reviewed passengers)
-    UI->>GW: POST /plans/{id}/approve (X-Operator-Id)
+    Op->>UI: Approve (+ reviewed passengers · in assist mode accept / reject exception recommendations)
+    UI->>API: POST /plans/{id}/approve (X-Operator-Id, exception_decisions)
+    API->>AL: fresh inventory
+    API->>API: re-verify all decisions · waivers need a duty manager (422/403 -> nothing approved)
+    API->>GW: record the approval
     GW->>AG: resume
     AG->>GW: authorize_execution
     GW-->>AG: signed single-use token bound to item digest
@@ -179,6 +195,12 @@ stateDiagram-v2
 Manual-review passengers (SSR, at-risk connections) are only executed if the operator explicitly
 includes them in the approval; otherwise they are marked `HELD_FOR_OPERATOR`.
 
+In assist mode (`EXCEPTION_RESOLUTION_MODE=assist`) the approval also carries a decision per exception passenger
+(`exception_decisions`):
+- the control plane verifies all decisions together against fresh inventory; if any fails, **nothing is approved**;
+- a policy waiver can only be approved by an operator listed in `DUTY_MANAGERS` and is audited as `policy.waiver`;
+- accepted reassignments and waivers go into the execution token's item list, and a decision overrides the manual-review checkbox.
+
 ## 6. Optimization flow
 
 ```mermaid
@@ -186,6 +208,8 @@ flowchart LR
     P[Passengers<br/>tier · VIP · cabin · SSR · onward flight] --> F
     ALT[Alternative flights<br/>seats per cabin · carrier · times] --> F
     POL[Retrieved policies<br/>policy-params] --> C[Policy compiler<br/>PolicyRules + applied/missing] --> F
+    CON["optimization/constraints.py<br/>shared constraint checks C4 · C5 · C6<br/>+ waivability"] --> F
+    CON --> EX["exception analysis · exception verifier<br/>(same checks)"]
     W[config/optimization.yaml<br/>weights] --> F
     F[Formulation<br/>screen flights C5/C6<br/>eligible x p,f,c C4/C6<br/>costs C3 + objective] --> M[MilpProblem<br/>CSR matrix, bounds, binary vars]
     M -->|OPTIMIZATION_PROVIDER=cuopt| CU[NVIDIA cuOpt server]
@@ -198,6 +222,11 @@ flowchart LR
 `x[p,f,c]` binary, `y[p]` binary; C1 `Σx + y = 1`, C2 capacity; C3 downgrade penalty (tier × VIP);
 C4 MCT; C5 same destination; C6 carrier/window/flight-status policy; objective = delay × tier + VIP delay
 + downgrade + connection risk + rebooking cost + 100 000 × unassigned.
+
+Constraint checks live in one place, `optimization/constraints.py`, used by the solver formulation, the exception
+analysis and the exception verifier - so the verifier can never reject an option the model was shown as feasible.
+Waivability is decided by the policy rule behind a block: only co-terminal, interline and re-protection-window blocks can
+be waived; MCT, airport change, SSR, seats and flight status never can.
 
 ## 7. AWS deployment
 

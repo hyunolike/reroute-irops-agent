@@ -15,6 +15,7 @@
 | [6. 실수했을 때의 복구 경로](#6-실수했을-때의-복구-경로) | 모델이 틀리거나 멈출 때 |
 | [7. 두 가지 실행 형태](#7-두-가지-실행-형태) | API 안에서 실행 vs 샌드박스 worker |
 | [8. 외부 에이전트 모드](#8-외부-에이전트-모드-openclaw--mcp) | NemoClaw의 OpenClaw가 MCP로 ReRoute를 사용 |
+| [9. 예외 승객 처리](#9-예외-승객-처리-제안--검증--승인) | 자동 배정되지 않은 승객: LLM 제안 → 검증기 → 운영자 결정 |
 
 ---
 
@@ -33,15 +34,16 @@ flowchart TB
             fb["스크립트 플래너<br/>(키가 없을 때만, 화면에 경고)"]
         end
 
-        subgraph hands["🛠 손 — 도구 8종 (타입 검증된 인자)"]
+        subgraph hands["🛠 손 — 도구 9종 (타입 검증된 인자)"]
             t1["조회<br/>get_disrupted_flight<br/>get_affected_passengers<br/>search_alternative_flights"]
             t2["지식<br/>search_rebooking_policy"]
             t3["결정 위임<br/>optimize_rebooking"]
-            t4["예외 분석<br/>explore_exception_options"]
+            t4["예외 분석 · 제안<br/>explore_exception_options<br/>propose_exception_resolution"]
             t5["제안 · 실행<br/>propose_rebooking<br/>execute_rebooking 🔒"]
         end
 
-        mem[("📒 작업 기억<br/>항공편 · 승객 · 대체편<br/>검색된 규정 · 최적화 결과<br/>예외 분석 · 재배정안 ID")]
+        mem[("📒 작업 기억<br/>항공편 · 승객 · 대체편<br/>검색된 규정 · 최적화 결과<br/>예외 분석 · 예외 권고 · 재배정안 ID")]
+        ver["✅ 결정적 검증기<br/>solver와 같은 제약 코드로<br/>예외 제안 판정"]
         guard["🛡 통제된 통신<br/>모든 호출: 정책 검사 → 감사 기록"]
         log["📡 이벤트 로그<br/>→ 대시보드 실시간(SSE)"]
     end
@@ -49,6 +51,7 @@ flowchart TB
     orch <--> brain
     orch --> hands
     hands <--> mem
+    t4 --> ver
     hands --> guard
     orch --> log
 
@@ -59,9 +62,10 @@ flowchart TB
 ```
 
 - **두뇌:** 다음에 무엇을 할지 고르는 부분입니다. 실제 모드에서는 Nemotron이 매 턴 도구와 인자를 직접 고릅니다.
-- **손:** 도구 8종입니다. 도메인 작업은 전부 이 도구를 통해 HTTP API로만 합니다. 에이전트는 DB에 직접 접근하지 않습니다.
+- **손:** 도구 9종입니다. 도메인 작업은 전부 이 도구를 통해 HTTP API로만 합니다. 에이전트는 DB에 직접 접근하지 않습니다.
 - **기억:** 승객 35명 같은 큰 데이터는 여기에 둡니다. LLM에게는 요약만 보여줍니다(5번 그림).
 - **안전장치:** 오케스트레이터가 순서·인자·사전 조건을 검사합니다. 모든 외부 통신은 OpenShell 정책으로 검사되고 감사 로그에 남습니다.
+- **검증기:** LLM이 예외 승객에 대해 낸 제안을 solver와 같은 제약 코드로 판정합니다. 통과한 제안만 권고가 됩니다(9번 그림).
 
 ## 2. 에이전트 루프 (계획 → 행동 → 관찰)
 
@@ -69,7 +73,7 @@ flowchart TB
 flowchart TD
     start(["목표 수신<br/>RECEIVED"]) --> think
 
-    think["🧠 LLM에 전달<br/>시스템 규칙 + 대화 기록 + 도구 명세 8종"] --> resp{"LLM 응답에<br/>도구 호출이 있는가?"}
+    think["🧠 LLM에 전달<br/>시스템 규칙 + 대화 기록 + 도구 명세 9종"] --> resp{"LLM 응답에<br/>도구 호출이 있는가?"}
 
     resp -- "예 (한 번에 여러 개 가능)" --> v1{"등록된 도구?"}
     v1 -- 아니오 --> err["오류를 LLM에 돌려줌<br/>(가드레일 이벤트 기록)"]
@@ -123,12 +127,14 @@ sequenceDiagram
     T->>S: 기억 속 데이터 + 규정 → MILP → cuOpt
     S-->>T: 배정 결과 (자동 31 · 검토 3 · 대안 없음 1)
     L-->>O: explore_exception_options(P010, P011, P013, P014)
-    T-->>O: P010: 7C1102는 연결 가능하지만 IROP-002로 차단
+    T-->>O: P010: 7C1102는 연결 가능하지만 IROP-002로 차단 (면제 가능)
+    L-->>O: propose_exception_resolution × 4 (승객별 조치 1개)
+    T-->>O: 검증기 판정: P010 정책 면제 → duty manager 필요 · P011·P013·P014 확인 PASS
     L-->>O: propose_rebooking(KE123)
     O->>L: solver 결과로 운영자 브리핑 작성 (인용 규정 검증)
     T->>S: 재배정안 저장 + 승인 요청 (PENDING)
     O-->>Op: WAITING_APPROVAL (대시보드 실시간 표시)
-    Note over Op,S: 승인 후에만 execute_rebooking → 승인 게이트웨이 토큰 → Booking API
+    Note over Op,S: 승인 후에만 execute_rebooking → 승인 게이트웨이 토큰 → Booking API<br/>assist 모드에서는 운영자가 예외 권고를 승객별로 수락·거절 (9번 그림)
 ```
 
 턴 구성(한 턴에 도구를 몇 개 부를지, 규정 검색을 몇 번 할지)은 모델이 정하므로 실행마다 달라질 수 있습니다.
@@ -141,13 +147,14 @@ flowchart TB
     subgraph llm["🧠 Nemotron이 결정"]
         l1["다음에 호출할 도구"]
         l2["검색 질의 문구 · 추가 검색 여부"]
-        l3["어떤 예외 승객을 조사할지"]
+        l3["어떤 예외 승객을 조사할지<br/>예외 승객별 처리 방법 제안"]
         l4["운영자 브리핑 문장"]
     end
     subgraph code["🧭 오케스트레이터 코드가 강제"]
         c1["도구 등록 · 인자 형식 · 사전 조건"]
         c2["상태 머신 · 최대 턴 수"]
         c3["브리핑 인용 규정 검증"]
+        c4["예외 제안 검증<br/>(solver와 같은 제약 · 좌석 합산)"]
     end
     subgraph solver["🧮 cuOpt solver가 결정"]
         s1["누가 어느 편·좌석으로 가는지"]
@@ -158,6 +165,7 @@ flowchart TB
     subgraph human["👤 사람이 결정"]
         h1["승인 / 반려"]
         h2["검토 대상 승객 포함 여부"]
+        h3["예외 권고 수락 · 수정 · 거절<br/>(정책 면제는 duty manager만)"]
     end
     subgraph shell["🛡 OpenShell이 결정"]
         o1["접근 가능한 호스트 · 경로 · 파일"]
@@ -171,6 +179,7 @@ flowchart TB
 ```
 
 LLM은 **어떻게 일할지**를 정하고, **결과(배정)와 권한(승인·접근)은 정하지 않습니다.**
+예외 승객에 대한 제안도 마찬가지입니다. 코드가 열거한 선택지 안에서만 고르고, 검증기와 사람을 거쳐야 실행됩니다.
 
 ## 5. LLM이 보는 것과 보지 않는 것
 
@@ -182,6 +191,8 @@ flowchart LR
         a3["결과 요약<br/>예: 35명 · VIP 3 · 연결 5"]
         a4["규정 본문 발췌 + coverage"]
         a5["최적화 요약 · 예외 목록"]
+        a6["예외 승객의 선택지<br/>(차단 제약 · 정책 ID · 면제 가능 여부)"]
+        a7["제안에 대한 검증 판정"]
     end
     subgraph hidden["LLM을 거치지 않는 것"]
         b1["승객 35명의 전체 데이터"]
@@ -209,6 +220,7 @@ flowchart TD
     x6["NIM 장애 지속"] --> g5
     x7["허용되지 않은 호스트 호출"] --> g7["OpenShell 정책 차단 + 감사 기록"]
     x8["승인 없이 execute 시도"] --> g8["승인 게이트웨이 403 + 감사 기록"]
+    x9["예외 제안이 규칙 위반<br/>예: 지어낸 편, MCT·SSR 면제"] --> g9["검증기 REJECTED + 위반 사유 반환<br/>1회 수정, 또 실패하면 권고 없음"] --> ok
 ```
 
 ## 7. 두 가지 실행 형태
@@ -251,7 +263,7 @@ sequenceDiagram
     MCP->>O: 외부 계획자 세션 생성
     O-->>D: "외부 에이전트가 시작한 작업" 표시
     loop OpenClaw가 계획
-        OC->>MCP: get_disrupted_flight / search_rebooking_policy / optimize_rebooking …
+        OC->>MCP: get_disrupted_flight / search_rebooking_policy / optimize_rebooking<br/>explore_exception_options / propose_exception_resolution …
         MCP->>O: 같은 검증 · 사전 조건 · 상태 머신
         O-->>MCP: 결과 또는 오류 + next_step_hint
         MCP-->>OC: 관찰
@@ -264,8 +276,55 @@ sequenceDiagram
 ```
 
 외부 에이전트가 두뇌가 되어도 ReRoute의 규칙은 그대로입니다. 규정 확보 없이 최적화할 수 없고, 사실 없이 "조치 불필요"로 끝낼 수 없으며, 승인은 사람만 합니다.
+외부 에이전트의 예외 제안도 같은 검증기를 거칩니다.
+
+## 9. 예외 승객 처리 (제안 → 검증 → 승인)
+
+> 설계와 구현 상세: [exception-resolution.md](exception-resolution.md)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant L as Nemotron
+    participant T as 도구 (에이전트)
+    participant V as 검증기
+    participant CP as 컨트롤 플레인
+    participant AL as 항공사 API
+    actor Op as 운영자
+
+    L->>T: explore_exception_options(P010)
+    T-->>L: 대체편별 차단 제약 · 정책 ID · 면제 가능 여부
+    L->>T: propose_exception_resolution(P010, 정책 면제 → 7C1102, IROP-002)
+    T->>V: 이미 통과한 다른 승객 제안과 함께 판정
+    alt 위반 (지어낸 편 · 면제 불가 제약 · 좌석 초과)
+        V-->>L: REJECTED + 위반 사유 → 1회 수정
+    else 통과
+        V-->>T: PASS_REQUIRES_WAIVER (duty manager 필요)
+    end
+    T->>CP: 재배정안 + 권고·시도 기록 (planner, prompt version)
+    Op->>CP: 권고 조회 (assist 모드)
+    CP->>AL: 최신 재고 조회
+    CP-->>Op: 다시 검증한 권고 카드
+    Op->>CP: 승인 + 승객별 결정 (수락 · 수정 · 거절)
+    CP->>AL: 최신 재고 조회
+    CP->>CP: 결정 전체를 함께 검증 · 면제는 duty manager인지 확인
+    alt 하나라도 실패
+        CP-->>Op: 422 / 403 — 아무것도 승인되지 않음
+    else 통과
+        CP-->>Op: 승인 → 실행 토큰에 면제 좌석 포함 → Booking API
+    end
+```
+
+| 모드 (`EXCEPTION_RESOLUTION_MODE`) | 운영자에게 보이는 것 |
+|---|---|
+| `shadow` (기본) | 없음. 권고는 기록만 되고 평가·트레이스에 쓰입니다 |
+| `assist` | 승인 화면의 예외 권고 카드. 승객별로 수락·거절 |
+| `off` | 없음. 제안 도구도 등록되지 않습니다 |
+
+모든 과정은 트레이스(`GET /api/agent/tasks/{id}/trace`)에 예외 승객별 스팬으로 남고, 골든셋 평가(`make eval-exceptions`)로 품질을 잽니다.
 
 ---
 
-관련 코드: `apps/api/app/agent/orchestrator.py` (루프·가드레일) · `app/agent/prompts.py` (규칙) · `app/tools/` (도구 8종) ·
-`app/providers/llm/` (Nemotron 어댑터·선택 로직) · `app/agent/worker.py` (샌드박스 worker) · `app/agent/evaluate.py` (실제 모델 평가) · `app/integrations/mcp_server.py` (MCP 서버)
+관련 코드: `apps/api/app/agent/orchestrator.py` (루프·가드레일) · `app/agent/prompts.py` (규칙) · `app/tools/` (도구 9종) ·
+`app/providers/llm/` (Nemotron 어댑터·선택 로직) · `app/agent/worker.py` (샌드박스 worker) · `app/agent/evaluate.py` (실제 모델 평가) · `app/integrations/mcp_server.py` (MCP 서버) ·
+`app/resolution/` (예외 제안 검증기·컨트롤 플레인 재검증) · `app/observability/` (트레이스·OTLP) · `app/evals/` (골든셋 평가)
