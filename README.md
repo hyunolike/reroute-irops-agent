@@ -24,7 +24,9 @@ https://github.com/user-attachments/assets/3676a23d-fc44-42bb-8b70-774336f012c3
 | 🎞️ 21초 런칭 영상 | [docs/video/reroute-launch.mp4](docs/video/reroute-launch.mp4) — 결항 → 한 문장 지시 → cuOpt 재배정 → 사람 승인 흐름 |
 | 📖 심사위원 3분 가이드 | http://localhost:3000/guide · [발표 대본 (영문)](docs/demo-scenario.md) |
 | 🤖 에이전트 구조와 동작 (그림 7종) | [docs/agent.md](docs/agent.md) · [English](docs/agent.en.md) |
+| 🧸 3D 시스템 구조도 | [아래 아키텍처](#아키텍처) · [원본 PNG](docs/assets/reroute-system-architecture-cute3d.png) |
 | 🧭 시스템 아키텍처 (Mermaid 다이어그램 7종) | [docs/architecture.md](docs/architecture.md) · [English](docs/architecture.en.md) |
+| 🖥️ GPU 서버에서 LLM 직접 실행 | 아래 [GPU 자체 호스팅 추론](#gpu-자체-호스팅-추론-선택-배포안) — 현재 연동과 추가 설정 구분 |
 | 🟩 NVIDIA 연동 방식과 검증 수준 | [docs/nvidia-integration.md (영문)](docs/nvidia-integration.md) · [nvidia/](nvidia/) |
 | ☁️ AWS 배포 (Terraform) | [infra/terraform/README.md](infra/terraform/README.md) · [English](infra/terraform/README.en.md) · 아래 [AWS 배포](#aws-배포) 절 |
 
@@ -42,7 +44,7 @@ https://github.com/user-attachments/assets/3676a23d-fc44-42bb-8b70-774336f012c3
 ## 목차
 1. [문제](#문제) · 2. [해결책](#해결책) · 3. [왜 Agentic AI인가](#왜-agentic-ai인가) · 4. [왜 NVIDIA인가](#왜-nvidia인가)
 5. [아키텍처](#아키텍처) · [LLM 에이전트 동작 방식](#llm-에이전트-동작-방식) · [NemoClaw·OpenClaw 연동](#nemoclaw--openclaw-연동-mcp) · 6. [NVIDIA 스택과 실행 모드](#nvidia-스택과-실행-모드) · 7. [데모](#데모) · 8. [시작하기](#시작하기)
-9. [클라우드 배포 구조](#클라우드-배포-구조) · [AWS 배포](#aws-배포) · 10. [보안](#보안) · 11. [최적화 모델](#최적화-모델) · 12. [화면](#화면) · 13. [향후 계획](#향후-계획)
+9. [클라우드 배포 구조](#클라우드-배포-구조) · [GPU 자체 호스팅 추론](#gpu-자체-호스팅-추론-선택-배포안) · [AWS 배포](#aws-배포) · 10. [보안](#보안) · 11. [최적화 모델](#최적화-모델) · 12. [화면](#화면) · 13. [향후 계획](#향후-계획)
 
 ---
 
@@ -115,15 +117,21 @@ VIP 평균 지연 5시간 40분 → 4시간**입니다. 전체 평균 지연은 
 
 ## 아키텍처
 
+![ReRoute 3D 시스템 구조도: 운영자와 Next.js, FastAPI의 Python 에이전트, 규정 검색과 MILP solver, 승인 게이트, Mock 항공사 API와 PostgreSQL, 선택적 NVIDIA 및 MCP 연동](docs/assets/reroute-system-architecture-cute3d.png)
+
+*모델은 제안하고 Python은 실행하며, solver는 배정하고 사람은 승인합니다. 실선은 기본 경로, 점선은 선택 연동입니다. 기본 실행은 inline과 policy-mirror이며, cuOpt GPU 실서버 실행과 Brev 배포는 미검증입니다. GPU에서 LLM을 직접 실행하는 방식은 [GPU 자체 호스팅 추론](#gpu-자체-호스팅-추론-선택-배포안)을 참고하세요.*
+
+아래 Mermaid는 NVIDIA 연동과 원격 worker를 선택한 구조입니다. 키가 없는 기본 `docker compose up --build`는 **inline Python 에이전트 · 스크립트 플래너 · lexical 검색 · HiGHS CPU solver · policy-mirror**로 실행됩니다. 실제 OpenShell worker와 cuOpt GPU 서버는 선택 구성이고, 자체 호스팅 LLM은 아래 [선택 배포안](#gpu-자체-호스팅-추론-선택-배포안)에서 현재 코드와 추가 설정을 구분합니다. 기술별 기존 검증 기록은 [NVIDIA 연동 문서](docs/nvidia-integration.md)에 있습니다.
+
 ```mermaid
 flowchart TB
     op([운영자]) --> web["Next.js 운영 대시보드"]
     web -- "REST + SSE (/api/*)" --> cp["ReRoute 컨트롤 플레인 (FastAPI)<br/>Agent API · 승인 게이트웨이 · 감사 로그<br/>지식 서비스 · 최적화 서비스"]
     subgraph sandbox["NVIDIA OpenShell 샌드박스"]
-        agent["ReRoute 에이전트<br/>오케스트레이터 + 도구 8종"]
+        agent["ReRoute 에이전트<br/>Python 오케스트레이터 + 도구"]
     end
     cp <--> agent
-    agent -- "도구 호출 (tool calling)" --> nim["Nemotron (NIM)"]
+    agent -- "다음 도구·예외 조치 제안 요청" --> nim["Nemotron (NIM)"]
     agent -- HTTP --> airline["Mock 항공사 API<br/>운항 · 탑승객 · 좌석 재고 · 예약"]
     cp -- "임베딩 + 재순위화" --> ret["NeMo Retriever"]
     cp -- MILP --> cuopt["NVIDIA cuOpt"]
@@ -131,12 +139,15 @@ flowchart TB
     airline --> db
 ```
 
-- 에이전트는 DB에 직접 SQL을 실행하지 않습니다. 모든 도메인 행동은 명시적인 도구 → HTTP API를 거칩니다.
-- 도구 인자는 **데이터가 아니라 핸들**(편명, 검색어)입니다. 승객 35명의 데이터가 LLM을 거치지 않으므로 LLM이 배정을 바꿀 수 없습니다.
+- 에이전트의 도메인 조회·변경은 명시적인 도구 → HTTP API를 거칩니다. 원격 worker는 DB에 직접 접근하지 않으며, 컨트롤 플레인이 상태·승인·감사 로그를 저장합니다.
+- 조회 도구는 편명·검색어 같은 핸들을 받고 LLM에는 승객 요약·연결편·특수지원 정보와 예외 승객 ID 등을 반환합니다. 전체 승객·좌석 데이터로 기본 배정을 계산하는 주체는 solver입니다.
+- 모델은 다음 도구와 예외 조치를 **제안**하고 Python이 인자·규정·순서를 검증해 실행합니다. `assist` 모드의 예외 조치는 운영자 승인·실행 시 최신 좌석 재고로 재검증하며, 모델의 제안 자체는 예약을 변경하지 않습니다.
 - `AGENT_EXECUTION=remote`로 두면 에이전트는 **DB 접속 정보도, 승인 서명 키도 없는** 별도 worker 프로세스로 실행됩니다. 이 worker가 OpenShell 샌드박스에서 돌아가는 대상입니다.
 
 **도구:** `get_disrupted_flight` · `get_affected_passengers` · `search_alternative_flights` · `search_rebooking_policy` ·
 `optimize_rebooking` · `explore_exception_options` · `propose_rebooking` · `execute_rebooking` *(승인 필요)*
+
+`EXCEPTION_RESOLUTION_MODE=shadow`(기본) / `assist`에서는 `propose_exception_resolution`도 등록되어 9종, `off`에서는 8종입니다. `shadow`는 예외 제안을 평가용으로 기록하고, `assist`는 검증된 제안을 운영자 검토 화면에 표시합니다.
 
 **상태 머신:** `RECEIVED → ANALYZING_DISRUPTION → FETCHING_PASSENGERS → SEARCHING_ALTERNATIVES → RETRIEVING_POLICIES →
 OPTIMIZING → GENERATING_PROPOSAL → WAITING_APPROVAL → EXECUTING → COMPLETED` (+ `REJECTED`, `FAILED`).
@@ -199,7 +210,7 @@ REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://<도메인>/mcp            
 
 | 환경 변수 | 실제 NVIDIA 모드 | 데모 / 대체(Fallback) 모드 |
 |---|---|---|
-| `LLM_PROVIDER` | `auto`(기본) / `nvidia` → NIM의 Nemotron (기본 `nvidia/nemotron-3-super-120b-a12b`) | 키가 없을 때만 → 스크립트 플래너 (도구·가드레일은 동일, 화면에 경고 표시) |
+| `LLM_PROVIDER` | 키가 있는 `auto`(기본) / `nvidia` → NIM의 Nemotron (기본 `nvidia/nemotron-3-super-120b-a12b`) | 키 없음 / `mock` 지정 → 스크립트 플래너; 모델 오류가 재시도·가드레일로 복구되지 않으면 명시적 대체 실행 (도구·가드레일 동일) |
 | `RETRIEVER_PROVIDER` | `nvidia` → `nemotron-3-embed-1b` + `llama-nemotron-rerank-vl-1b-v2` | `lexical` → 같은 문서에 대한 BM25 검색 |
 | `OPTIMIZATION_PROVIDER` | `cuopt` → cuOpt 서버 (GPU) | `fallback` → HiGHS (CPU), **같은** MILP 객체 |
 | `SECURITY_RUNTIME` | `openshell` → OpenShell 샌드박스 안의 에이전트 worker | `policy-mirror` → 같은 정책 YAML을 프로세스 안에서 평가 |
@@ -219,7 +230,7 @@ REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://<도메인>/mcp            
 
 ## 데모
 
-`DEMO_MODE=true`에서는 같은 시드 데이터, 같은 결항 상황, 결정론적 응답을 사용하므로 네트워크 문제로 발표가 깨지지 않습니다.
+키가 없는 기본 Docker 구성은 같은 시드 데이터와 스크립트 플래너를 사용합니다. 네트워크 없는 데모를 확실히 고정하려면 `LLM_PROVIDER=mock`, `RETRIEVER_PROVIDER=lexical`, `OPTIMIZATION_PROVIDER=fallback`을 사용합니다. `DEMO_MODE=true`만으로 LLM 선택이 고정되지는 않으며, `LLM_PROVIDER=auto`에 키가 있으면 실제 모델을 호출합니다.
 전체 대본은 [docs/demo-scenario.md](docs/demo-scenario.md)에 있습니다.
 
 1. **Run Agent** → 도구 호출이 배지와 함께 실시간 타임라인으로 표시
@@ -315,6 +326,46 @@ flowchart LR
 
 cuOpt는 GPU 인스턴스(`enable_gpu = true`)에서 앱 호스트에 함께 뜹니다. 라이브 데모 계정은 AWS 무료 플랜이라 GPU를 쓸 수 없어
 같은 MILP를 CPU(HiGHS)로 풉니다.
+
+## GPU 자체 호스팅 추론 (선택 배포안)
+
+[시스템 구조도](#아키텍처)의 NVIDIA Hosted API 대신 별도 GPU 추론 서버를 연결하는 선택안입니다.
+
+학습이 끝난 **모델 가중치(weights)를 GPU 서버에 내려받고**, NIM 또는 vLLM이 이를 GPU 메모리에 올려 **추론 API**를 제공하는 일반적인 자체 호스팅 방식입니다. 이 절은 학습·파인튜닝이 아니라 추론 배포 설명이며, **이 저장소에서 Brev나 자체 호스팅 NIM/vLLM을 배포·실행 검증했다는 뜻은 아닙니다.** 현재 README에 기록된 라이브 데모는 NVIDIA 호스팅 API를 호출합니다.
+
+| 구성 요소 | 역할 |
+|---|---|
+| **Brev** | GPU 서버 생성·접속·관리. 인스턴스를 만드는 것만으로 선택한 모델이나 추론 서버가 자동 설치되지는 않습니다. |
+| **Nemotron** | 학습된 LLM 모델과 가중치. ReRoute에서는 도구 선택·브리핑·예외 조치를 제안합니다. |
+| **NIM / vLLM** | 선택한 모델을 로드하고 `/v1/chat/completions` 같은 HTTP 추론 API를 제공하는 서버. 둘 중 해당 모델을 지원하는 방식을 선택합니다. |
+| **ReRoute Python 앱 / worker** | API로 모델의 제안을 받고, 검증·도구 호출·상태 전이·승인 후 예약 실행을 수행합니다. GPU 추론 서버와 별도 호스트에서 실행할 수도 있습니다. |
+| **cuOpt / HiGHS · 운영자** | solver는 기본 승객 배정을 계산하고, 운영자는 예약 변경을 승인합니다. LLM을 자체 호스팅해도 이 책임 경계는 동일합니다. |
+
+```text
+ReRoute Python 앱 / worker ── HTTP 추론 요청 ──> GPU 서버
+                                               NIM 또는 vLLM
+                                               └─ 학습된 Nemotron weights
+                                                   (Brev 등으로 서버 관리)
+```
+
+### 현재 코드와 추가로 필요한 설정
+
+- **이미 구현됨:** [`Settings`](apps/api/app/config.py)의 `NIM_BASE_URL` / `NIM_MODEL`과 [`NvidiaNimProvider`](apps/api/app/providers/llm/nim.py)는 OpenAI 호환 Chat Completions 요청을 구성합니다. 현재 기본 주소는 `https://integrate.api.nvidia.com/v1`입니다. [`factory`](apps/api/app/providers/llm/factory.py)는 `LLM_PROVIDER=auto` / `nvidia`에서도 비어 있지 않은 `NVIDIA_API_KEY`를 요구하고 Bearer 헤더로 전달하며, 키가 없으면 스크립트 플래너를 선택합니다.
+- **추가 배포 설정 필요:** 현재 [`docker-compose.yml`](docker-compose.yml)은 `NIM_BASE_URL`을 API/worker 컨테이너에 전달하지 않고 NIM/vLLM 서비스도 정의하지 않습니다. 자체 호스팅에서는 실제 LLM 호출 프로세스(`inline`: API, `remote`: worker)의 환경에 `/v1`을 포함한 서버 주소와 서버가 제공하는 모델 ID를 전달해야 합니다. `.env`의 주소만 바꾸거나 `--profile gpu`를 켜는 것으로 끝나지 않습니다. 이 GPU 프로필은 **cuOpt**용입니다.
+- **보안 경로 조정 필요:** [`기본 정책`](nvidia/openshell/policies/reroute-agent.yaml)과 [`자격증명 provider`](nvidia/openshell/providers/nvidia-reroute.yaml)는 NVIDIA 호스팅 주소만 허용합니다. 자체 추론 서버의 호스트·포트·`POST /v1/chat/completions`를 policy-mirror와 실제 OpenShell 정책에 반영하고, provider의 자격증명 주입 경로도 조정해야 합니다. 승인 금지 규칙은 유지합니다. 자체 API 인증 토큰을 현재 `NVIDIA_API_KEY` 필드로 전달할 경우, 같은 필드를 쓰는 NVIDIA Retriever 인증과 충돌하지 않도록 별도 자격증명 설계를 확인해야 합니다.
+- **아직 미검증:** 자체 NIM/vLLM의 모델·chat template·`tools`·`tool_choice=auto`·`tool_calls`·추론 옵션 호환성과 전체 승인 흐름. 현재 adapter는 vLLM을 별도 provider로 구분하지 않고 NIM으로 표시하므로, 일반 vLLM 연결을 기존 NVIDIA 실행 검증으로 해석하면 안 됩니다.
+
+### 배포 전 확인할 항목
+
+1. 선택한 모델과 NIM/vLLM 버전에 맞는 **GPU 종류·개수·VRAM**, 컨텍스트 길이와 동시 요청 수를 확인합니다. 기본 120B 모델 ID가 작은 GPU 한 장에 들어간다고 가정하지 않습니다.
+2. 모델 라이선스·다운로드 권한, NIM 컨테이너 접근·사용 조건, NVIDIA 드라이버·Container Toolkit 또는 vLLM 실행 환경을 확인합니다. NIM용 NGC 다운로드 자격증명과 앱의 추론 API 인증은 별도 역할입니다.
+3. 초기 weights/컨테이너 다운로드 시간과 디스크 용량, 재시작 시 재사용할 캐시를 준비하고 모델 로딩·API 응답을 먼저 확인합니다.
+4. 엔드포인트는 사설망·포트 포워딩 또는 인증과 TLS가 있는 프록시로 보호합니다. vLLM의 `--api-key`만으로 모든 경로가 보호되는 것은 아니므로 네트워크 제한도 필요합니다.
+5. 도구 호출·예외 검증·운영자 승인·감사 로그·장애 시 대체 실행을 확인한 뒤 기존 평가와 승인 시나리오를 수행합니다. LLM 자체 호스팅은 Retriever나 cuOpt까지 함께 배포했다는 의미가 아닙니다.
+
+GPU 운영이 필요하지 않다면 **NVIDIA 호스팅 API**를 그대로 쓰는 것이 대안입니다. 모델 추론 위치만 외부로 바뀌며 ReRoute의 Python 실행·solver·사람 승인 구조는 유지됩니다.
+
+공식 절차: [Brev에서 NIM 배포](https://docs.nvidia.com/brev/guides/inference-deployment/deploying-nims) · [NIM 시작하기](https://docs.nvidia.com/nim/large-language-models/latest/getting-started.html) · [vLLM OpenAI 호환 서버](https://docs.vllm.ai/en/latest/serving/online_serving/openai_compatible_server/).
 
 ## AWS 배포
 
