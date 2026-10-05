@@ -25,7 +25,9 @@ https://github.com/user-attachments/assets/3676a23d-fc44-42bb-8b70-774336f012c3
 | 🎞️ 21-second launch video | [docs/video/reroute-launch.mp4](docs/video/reroute-launch.mp4) — cancellation → one-sentence command → cuOpt re-accommodation → human approval |
 | 📖 3-minute judge guide | http://localhost:3000/guide · [docs/demo-scenario.md](docs/demo-scenario.md) |
 | 🤖 Agent structure & behaviour (7 diagrams) | [docs/agent.en.md](docs/agent.en.md) · [한국어](docs/agent.md) |
+| 🧸 3D system diagram | [Architecture below](#architecture) · [Original PNG](docs/assets/reroute-system-architecture-cute3d.png) |
 | 🧭 System architecture (7 Mermaid diagrams) | [docs/architecture.en.md](docs/architecture.en.md) · [한국어](docs/architecture.md) |
+| 🖥️ Run the LLM on your GPU server | [Self-hosted GPU inference](#self-hosted-gpu-inference-optional-deployment) — existing integration versus required setup |
 | 🟩 NVIDIA integration & verification status | [docs/nvidia-integration.md](docs/nvidia-integration.md) · [nvidia/](nvidia/) |
 | ☁️ AWS deployment (Terraform) | [infra/terraform/README.en.md](infra/terraform/README.en.md) · [한국어](infra/terraform/README.md) |
 
@@ -43,7 +45,7 @@ A two-part write-up of the design decisions behind this repository (ReRoute).
 ## Contents
 1. [Problem](#problem) · 2. [Solution](#solution) · 3. [Why Agentic AI?](#why-agentic-ai) · 4. [Why NVIDIA?](#why-nvidia)
 5. [Architecture](#architecture) · [How the LLM agent works](#how-the-llm-agent-works) · [NemoClaw · OpenClaw](#nemoclaw--openclaw-integration-mcp) · 6. [NVIDIA stack & run modes](#nvidia-stack--run-modes) · 7. [Demo](#demo) · 8. [Getting started](#getting-started)
-9. [Cloud deployment](#cloud-deployment) · [AWS deployment](#aws-deployment) · 10. [Security](#security) · 11. [Optimization](#optimization) · 12. [Screenshots](#screenshots) · 13. [Future work](#future-work)
+9. [Cloud deployment](#cloud-deployment) · [Self-hosted GPU inference](#self-hosted-gpu-inference-optional-deployment) · [AWS deployment](#aws-deployment) · 10. [Security](#security) · 11. [Optimization](#optimization) · 12. [Screenshots](#screenshots) · 13. [Future work](#future-work)
 
 ---
 
@@ -117,15 +119,21 @@ Each technology closes a **different failure mode** of LLM agents.
 
 ## Architecture
 
+![ReRoute 3D system architecture: operator and Next.js, FastAPI Python agent, policy retrieval and MILP solver, approval gateway, Mock Airline API and PostgreSQL, optional NVIDIA and MCP integrations](docs/assets/reroute-system-architecture-cute3d.png)
+
+*The model proposes, Python executes, the solver allocates, and a human approves. Solid arrows show default paths; dashed arrows show optional integrations. Inline execution and policy mirror are defaults; live cuOpt GPU execution and Brev deployment remain unverified. The image uses Korean labels. See [self-hosted GPU inference](#self-hosted-gpu-inference-optional-deployment) for running the LLM on your own GPU server.*
+
+The Mermaid diagram below shows the NVIDIA integrations and remote worker selected. Without a key, default `docker compose up --build` uses an **inline Python agent, scripted planner, lexical retrieval, HiGHS CPU solver and policy mirror**. A real OpenShell worker and cuOpt GPU server are optional; [self-hosted LLM deployment](#self-hosted-gpu-inference-optional-deployment) separates existing code from required setup. Existing verification records are in [NVIDIA integration notes](docs/nvidia-integration.md).
+
 ```mermaid
 flowchart TB
     op([Operator]) --> web["Next.js Operations Dashboard"]
     web -- "REST + SSE (/api/*)" --> cp["ReRoute control plane (FastAPI)<br/>Agent API · Approval Gateway · Audit<br/>Knowledge service · Optimization service"]
     subgraph sandbox["NVIDIA OpenShell sandbox"]
-        agent["ReRoute Agent<br/>orchestrator + 8 typed tools"]
+        agent["ReRoute Agent<br/>Python orchestrator + typed tools"]
     end
     cp <--> agent
-    agent -- "tool calling" --> nim["Nemotron via NIM"]
+    agent -- "request next tool / exception recommendation" --> nim["Nemotron via NIM"]
     agent -- HTTP --> airline["Mock Airline API<br/>flights · manifest · inventory · booking"]
     cp -- "embed + rerank" --> ret["NeMo Retriever"]
     cp -- MILP --> cuopt["NVIDIA cuOpt"]
@@ -133,12 +141,15 @@ flowchart TB
     airline --> db
 ```
 
-- The agent never runs SQL. Every domain action goes through an explicit tool → HTTP API.
-- Tool arguments are **handles, not data** (flight numbers, queries). Passenger data never passes through the LLM, so the LLM cannot alter the allocation.
+- Domain reads and changes go through an explicit tool → HTTP API. The remote worker has no direct DB access; the control plane persists state, approvals and audit records.
+- Lookup tools take handles such as flight numbers and queries, returning passenger summaries, connections, special-assistance information and exception passenger IDs to the LLM. The solver computes the base allocation from the full passenger and seat data.
+- The model **proposes** the next tool and exception action; Python validates arguments, policies and ordering before executing tools. In `assist` mode, exception actions are checked again against current inventory at approval and execution; the model's proposal itself never changes a booking.
 - With `AGENT_EXECUTION=remote` the agent runs as a separate worker **with no DB credentials and no approval-signing key** — the process that runs inside an OpenShell sandbox.
 
 **Tools:** `get_disrupted_flight` · `get_affected_passengers` · `search_alternative_flights` · `search_rebooking_policy` ·
 `optimize_rebooking` · `explore_exception_options` · `propose_rebooking` · `execute_rebooking` *(approval required)*
+
+`EXCEPTION_RESOLUTION_MODE=shadow` (default) / `assist` also registers `propose_exception_resolution`: 9 tools, versus 8 in `off` mode. `shadow` records recommendations for evaluation; `assist` shows verified recommendations for operator review.
 
 **State machine:** `RECEIVED → ANALYZING_DISRUPTION → FETCHING_PASSENGERS → SEARCHING_ALTERNATIVES → RETRIEVING_POLICIES →
 OPTIMIZING → GENERATING_PROPOSAL → WAITING_APPROVAL → EXECUTING → COMPLETED` (+ `REJECTED`, `FAILED`). Every transition is
@@ -205,7 +216,7 @@ REROUTE_MCP_TOKEN=... make mcp-smoke MCP_URL=https://<host>/mcp                 
 
 | Env | Real NVIDIA mode | Demo / fallback mode |
 |---|---|---|
-| `LLM_PROVIDER` | `auto` (default) / `nvidia` → Nemotron via NIM (default `nvidia/nemotron-3-super-120b-a12b`) | only without a key → scripted planner, same tools & guardrails, warning banner in the UI |
+| `LLM_PROVIDER` | `auto` (default) / `nvidia` with a key → Nemotron via NIM (default `nvidia/nemotron-3-super-120b-a12b`) | no key / explicit `mock` → scripted planner; unrecovered model errors after retries and guardrails trigger visible fallback, with the same tools & guardrails |
 | `RETRIEVER_PROVIDER` | `nvidia` → `nemotron-3-embed-1b` + `llama-nemotron-rerank-vl-1b-v2` | `lexical` → BM25 over the same documents |
 | `OPTIMIZATION_PROVIDER` | `cuopt` → cuOpt server (GPU) | `fallback` → HiGHS (CPU), **same** MILP object |
 | `SECURITY_RUNTIME` | `openshell` → agent worker inside an OpenShell sandbox | `policy-mirror` → same policy YAML evaluated in-process |
@@ -225,8 +236,7 @@ fallbacks. A fallback is never labelled as NVIDIA; automatic fallbacks are recor
 
 ## Demo
 
-`DEMO_MODE=true` uses the same seed, the same disruption and deterministic responses, so a network hiccup cannot break the
-presentation. Full script: [docs/demo-scenario.md](docs/demo-scenario.md).
+The default Docker setup without a key uses the same seed and a scripted planner. For a fixed offline demo, use `LLM_PROVIDER=mock`, `RETRIEVER_PROVIDER=lexical` and `OPTIMIZATION_PROVIDER=fallback`. `DEMO_MODE=true` alone does not fix the LLM choice: `LLM_PROVIDER=auto` with a key calls the real model. Full script: [docs/demo-scenario.md](docs/demo-scenario.md).
 
 1. **Run Agent** → live timeline of tool calls with component badges
 2. KPIs 35 / 31 / 3 / 1, FCFS comparison, seat loads, excluded flights with the policy that excluded them
@@ -321,6 +331,46 @@ flowchart LR
 
 cuOpt runs on the app host when it is a GPU instance (`enable_gpu = true`). The live demo's AWS account is on the free plan and cannot
 launch GPU instances, so the same MILP runs on CPU (HiGHS).
+
+## Self-hosted GPU inference (optional deployment)
+
+This optional setup replaces the NVIDIA Hosted API in the [system diagram](#architecture) with a separate GPU inference server.
+
+Self-hosting means downloading **already-trained model weights to a GPU server**, then loading them with NIM or vLLM to provide an **inference API**. This is inference deployment, not training or fine-tuning. **Brev and self-hosted NIM/vLLM deployment have not been verified in this repository.** The live demo recorded above calls NVIDIA's hosted API.
+
+| Component | Responsibility |
+|---|---|
+| **Brev** | Creates, connects to and manages GPU servers. Creating an instance alone does not automatically install your chosen model or inference server. |
+| **Nemotron** | The trained LLM and weights; proposes tools, briefings and exception actions for ReRoute. |
+| **NIM / vLLM** | Loads a supported model and exposes HTTP inference endpoints such as `/v1/chat/completions`. Choose the serving option supported by the selected model. |
+| **ReRoute Python app / worker** | Requests model recommendations, validates them, calls tools, advances state and executes bookings after approval. It can run on a different host from the GPU inference server. |
+| **cuOpt / HiGHS · operator** | The solver computes the base passenger allocation; the operator approves booking changes. Self-hosting the LLM preserves these boundaries. |
+
+```text
+ReRoute Python app / worker ── HTTP inference request ──> GPU server
+                                                        NIM or vLLM
+                                                        └─ trained Nemotron weights
+                                                            (managed with Brev, for example)
+```
+
+### Existing code and required setup
+
+- **Implemented:** [`Settings`](apps/api/app/config.py) exposes `NIM_BASE_URL` / `NIM_MODEL`, and [`NvidiaNimProvider`](apps/api/app/providers/llm/nim.py) builds OpenAI-compatible Chat Completions requests. The default is `https://integrate.api.nvidia.com/v1`. The [`factory`](apps/api/app/providers/llm/factory.py) requires a nonempty `NVIDIA_API_KEY` for `auto` / `nvidia` and sends it as a Bearer token; without a key it selects the scripted planner.
+- **Deployment setup required:** [`docker-compose.yml`](docker-compose.yml) does not forward `NIM_BASE_URL` to the API/worker and defines no NIM/vLLM service. Pass the server address including `/v1` and its served model ID to the actual LLM caller (`inline`: API; `remote`: worker). Changing the root `.env` alone or enabling `--profile gpu` is insufficient: that profile starts **cuOpt**.
+- **Security routing required:** the [`default policy`](nvidia/openshell/policies/reroute-agent.yaml) and [`credential provider`](nvidia/openshell/providers/nvidia-reroute.yaml) target NVIDIA's hosted endpoint. Configure the self-hosted host, port and `POST /v1/chat/completions` in both the policy mirror and actual OpenShell policy, and adjust provider credential injection. Preserve approval denials. If the self-hosted API token uses the current `NVIDIA_API_KEY` setting, check credential separation from NVIDIA Retriever, which uses the same field.
+- **Not yet verified:** self-hosted NIM/vLLM model support, chat templates, `tools`, `tool_choice=auto`, `tool_calls`, reasoning options and the full approval flow. The current adapter reports NIM and has no separate vLLM provider label; a generic vLLM connection must not be presented as existing NVIDIA execution verification.
+
+### Before deployment
+
+1. Match the model and serving version to **GPU type/count and VRAM**, context length and concurrency. Do not assume the default 120B model fits on one small GPU.
+2. Check model licensing/download access, NIM container access and usage terms, drivers and Container Toolkit or the vLLM runtime. NGC download credentials and application inference API authentication serve different purposes.
+3. Allow for the initial weights/container download, disk space and a persistent cache; confirm model loading and API responses first.
+4. Protect the endpoint with private networking/port forwarding or an authenticated TLS proxy. vLLM's `--api-key` does not protect every route; network restrictions are also necessary.
+5. Verify tool calls, exception checks, human approval, audit records and visible fallbacks, then run the existing evaluation and approval scenarios. Self-hosting the LLM does not also deploy Retriever or cuOpt.
+
+**NVIDIA's hosted API** remains an alternative when GPU operations are unnecessary. ReRoute's Python execution, solver and human approval flow stay the same.
+
+Official procedures: [NIM on Brev](https://docs.nvidia.com/brev/guides/inference-deployment/deploying-nims) · [NIM getting started](https://docs.nvidia.com/nim/large-language-models/latest/getting-started.html) · [vLLM OpenAI-compatible server](https://docs.vllm.ai/en/latest/serving/online_serving/openai_compatible_server/).
 
 ## AWS deployment
 
