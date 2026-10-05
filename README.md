@@ -1,3 +1,7 @@
+[![ReRoute — NVIDIA × FastCampus Korea Agentic AI Hackathon 온라인 예선 통과, 본선 진출 10팀 선정](docs/assets/reroute-finalist-banner.png)](https://fastcampus.co.kr/NVIDIA_hackathon)
+
+**온라인 예선 통과 · 본선 진출 10팀 선정** — [NVIDIA Korea Agentic AI Hackathon](https://fastcampus.co.kr/NVIDIA_hackathon). 본선은 2026년 10월 7일 예정입니다.
+
 # ReRoute — 자율 항공 비정상운항 복구 에이전트
 
 **🇰🇷 한국어** · [🇺🇸 English](README.en.md)
